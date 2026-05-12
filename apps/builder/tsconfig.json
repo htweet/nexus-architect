@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@nexus/core": ["../../packages/core/src/index.ts"],
+      "@nexus/wp-adapter": ["../../packages/wp-adapter/src/index.ts"]
+    },
+    "noEmit": true
+  },
+  "include": ["src", "src/types", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}

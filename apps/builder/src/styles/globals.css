@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NEXUS ARCHITECT — EXECUTIVE DARK
+   MD3 Charcoal & Emerald palette.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+html, body {
+  background-color: #09100c;
+  color: #dde4dd;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: rgba(16, 183, 127, 0.30);
+  color: #dde4dd;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.14); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.24); }
+
+/* ── Root shell layout ───────────────────────────────────────────────────── */
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.builder-shell {
+  display: grid;
+  grid-template-rows: 52px 1fr;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: #09100c;
+}
+
+.builder-workarea {
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ── Canvas node selection rings (emerald) ───────────────────────────────── */
+.nexus-node-selected {
+  outline: 2px solid #10b77f;
+  outline-offset: 1px;
+}
+
+.nexus-canvas-node:not(.nexus-node-selected):not(.nexus-node-editing):hover {
+  outline: 1px dashed rgba(80, 222, 163, 0.50);
+  outline-offset: 1px;
+}
+
+.nexus-node-hovered {
+  outline: 1px dashed rgba(80, 222, 163, 0.50);
+  outline-offset: 1px;
+}
+
+.nexus-node-editing {
+  outline: 2px solid #50dea3;
+  outline-offset: 1px;
+}
+
+/* ── Panel scrollbars ────────────────────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar       { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+
+/* ── Inspector inputs ────────────────────────────────────────────────────── */
+.inspector-input {
+  width: 100%;
+  height: 34px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 6px;
+  padding: 0 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #dde4dd;
+  transition: border-color 150ms, background 150ms;
+}
+.inspector-input:hover  { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.15); }
+.inspector-input:focus  { outline: none; border-color: #10b77f; background: rgba(16,183,127,0.06); box-shadow: 0 0 0 3px rgba(16,183,127,0.15); }
+.inspector-input::placeholder { color: rgba(255,255,255,0.25); }
+
+/* ── Toggle group (segmented control) ───────────────────────────────────── */
+.toggle-group {
+  display: flex;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px;
+  height: 34px;
+  overflow: hidden;
+  gap: 1px;
+}
+
+.toggle-group-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: #bbcabf;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+  border-radius: 7px;
+  padding: 0 10px;
+}
+
+.toggle-group-item:hover:not(.is-active) {
+  background: rgba(255,255,255,0.06);
+  color: #dde4dd;
+}
+
+.toggle-group-item.is-active,
+.toggle-group-item[data-active="true"] {
+  background: rgba(16, 183, 127, 0.20) !important;
+  color: #50dea3 !important;
+}
+
+/* ── Shadow utility ──────────────────────────────────────────────────────── */
+.shadow-panel { box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.04); }
+
+/* ── Inspector section label ─────────────────────────────────────────────── */
+.inspector-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #bbcabf;
+  padding: 12px 14px 8px;
+  line-height: 1.4;
+}
+
+/* ── Accordion animations ────────────────────────────────────────────────── */
+@keyframes accordion-down {
+  from { height: 0; opacity: 0; }
+  to   { height: var(--radix-accordion-content-height); opacity: 1; }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); opacity: 1; }
+  to   { height: 0; opacity: 0; }
+}
+.animate-accordion-down { animation: accordion-down 180ms ease-out; }
+.animate-accordion-up   { animation: accordion-up   150ms ease-in;  }
