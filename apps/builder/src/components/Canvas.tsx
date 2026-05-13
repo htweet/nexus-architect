@@ -13,6 +13,7 @@ import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/Button';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { NodeRenderer } from '@/components/canvas/NodeRenderer';
+import { BreadcrumbBar } from '@/components/canvas/BreadcrumbBar';
 import {
   useUIStore,
   useCanvasStore,
@@ -20,14 +21,14 @@ import {
   BREAKPOINT_CANVAS_WIDTHS,
 } from '@nexus/core';
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+// --- Empty State ---------------------------------------------------------------
 
 function EmptyCanvasState() {
   const openLeftPanel = useUIStore((s) => s.openLeftPanel);
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-8 select-none pointer-events-none">
-      {/* Icon box — emerald glow */}
+      {/* Icon box -- emerald glow */}
       <div
         className="relative h-20 w-20 rounded-2xl flex items-center justify-center"
         style={{
@@ -84,7 +85,7 @@ function EmptyCanvasState() {
   );
 }
 
-// ─── Preview Exit Bar ─────────────────────────────────────────────────────────
+// --- Preview Exit Bar ----------------------------------------------------------
 
 function PreviewExitBar() {
   const exitPreview = useUIStore((s) => s.exitPreview);
@@ -123,7 +124,7 @@ function PreviewExitBar() {
   );
 }
 
-// ─── Canvas Toolbar ───────────────────────────────────────────────────────────
+// --- Canvas Toolbar ------------------------------------------------------------
 
 function CanvasToolbar({ containerRef }: { containerRef: React.RefObject<HTMLElement | null> }) {
   const zoomLevel        = useUIStore((s) => s.zoomLevel);
@@ -170,7 +171,7 @@ function CanvasToolbar({ containerRef }: { containerRef: React.RefObject<HTMLEle
         </>
       )}
 
-      <Tooltip content="Zoom out (−)" side="top">
+      <Tooltip content="Zoom out (-)" side="top">
         <Button variant="ghost" size="xs" iconOnly onClick={zoomOut}>
           <Minus size={12} />
         </Button>
@@ -205,7 +206,7 @@ function CanvasToolbar({ containerRef }: { containerRef: React.RefObject<HTMLEle
   );
 }
 
-// ─── Canvas ───────────────────────────────────────────────────────────────────
+// --- Canvas -------------------------------------------------------------------
 
 export function Canvas() {
   const zoomLevel        = useUIStore((s) => s.zoomLevel);
@@ -241,14 +242,14 @@ export function Canvas() {
       )}
       style={{ background: '#09100c' }}
     >
-      {/* Floating "Exit Preview" bar — only in preview mode */}
+      {/* Floating "Exit Preview" bar -- only in preview mode */}
       {isPreviewMode && <PreviewExitBar />}
 
       <div
         className="flex min-h-full items-start justify-center py-8 px-6"
         onClick={handleCanvasClick}
       >
-        {/* Page frame — white canvas, the user's actual page */}
+        {/* Page frame -- white canvas, the user's actual page */}
         <div
           ref={setEmptyDropRef}
           data-testid="canvas-area"
@@ -273,6 +274,9 @@ export function Canvas() {
           ) : (
             <EmptyCanvasState />
           )}
+
+          {/* Breadcrumb ancestor trail -- edit mode only */}
+          {!isPreviewMode && <BreadcrumbBar />}
         </div>
       </div>
 

@@ -34,7 +34,17 @@ import { ButtonWidget }    from './button-widget';
 import { AccordionWidget } from './accordion-widget';
 import { TabsWidget }      from './tabs-widget';
 
-// ─── Register (order = palette sort order within each category) ───────────────
+// Auth — fully-wired Smart Component (useNexusContext)
+import { AuthWidget } from './auth-widget';
+
+// Layout — CSS Grid container with nested DnD
+import { NexusGridWidget } from './nexus-grid-widget';
+
+// NexusWidget — schema-driven API
+import { registerNexusAuthWidget, NexusAuthWidgetDef } from './nexus-auth-widget';
+import { bridgeNexusWidget } from './registry';
+
+// ─── Register (order = palette sort order within each category) ──────────────
 
 registerWidget(RootWidget);       // internal — not shown in palette
 // Layout
@@ -42,6 +52,7 @@ registerWidget(SectionWidget);
 registerWidget(ColumnsWidget);
 registerWidget(ContainerWidget);
 registerWidget(SpacerWidget);
+registerWidget(NexusGridWidget);
 // Content
 registerWidget(HeadingWidget);
 registerWidget(ParagraphWidget);
@@ -59,14 +70,13 @@ registerWidget(HtmlEmbedWidget);
 registerWidget(ButtonWidget);
 registerWidget(AccordionWidget);
 registerWidget(TabsWidget);
+// Smart Components (Auth, Forms)
+registerWidget(AuthWidget);
+
+// NexusWidget schema-driven registrations
+registerNexusAuthWidget();
+bridgeNexusWidget(NexusAuthWidgetDef);
 
 // Re-export for external use
 export { registerWidget, getWidget, getAllWidgets, getWidgetsByCategory } from './registry';
-export type { WidgetDefinition, WidgetCategory, WidgetRendererProps, WidgetInspectorProps, ChildNodeSpec } from './registry';
-
-// ─── NexusWidget registrations (new schema-driven API) ───────────────────────
-import { registerNexusAuthWidget, NexusAuthWidgetDef } from './nexus-auth-widget';
-import { bridgeNexusWidget } from './registry';
-
-registerNexusAuthWidget();
-bridgeNexusWidget(NexusAuthWidgetDef);
+export type { WidgetDefinition, WidgetCategory, WidgetRendererProps, WidgetInspectorProps, ChildNodeSpec } from 

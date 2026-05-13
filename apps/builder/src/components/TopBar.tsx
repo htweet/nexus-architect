@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Undo2, Redo2, Monitor, Tablet, Smartphone,
   ChevronDown, Plus, Trash2, Copy, Loader2, ExternalLink, Check,
-  LayoutTemplate, PanelLeft, PanelRight,
+  LayoutTemplate, PanelLeft, PanelRight, Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
@@ -19,6 +19,7 @@ import {
 import { useAdapter } from '@/contexts/AdapterContext';
 import { PublishDialog } from '@/components/panels/PublishDialog';
 import { TemplatesModal } from '@/components/panels/TemplatesModal';
+import { SettingsModal } from '@/components/panels/SettingsModal';
 import { PREVIEW_STORAGE_KEY } from '@/lib/preview-constants';
 import type { PublishResult } from '@nexus/core';
 
@@ -259,6 +260,7 @@ export function TopBar() {
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [previewing,    setPreviewing]    = useState(false);
+  const [settingsOpen,  setSettingsOpen]  = useState(false);
 
   const handleUndo = () => {
     const currentPage = useCanvasStore.getState().page ?? undefined;
@@ -376,6 +378,18 @@ export function TopBar() {
 
         <CollabAvatars />
 
+        {/* Settings button */}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          title="Builder settings (⌘,)"
+          className="flex items-center justify-center w-8 h-8 rounded-md transition-colors duration-150"
+          style={{ color: '#bbcabf' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#dde4dd'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#bbcabf'; }}
+        >
+          <Settings size={15} />
+        </button>
+
         <div className="w-px h-5" style={{ background: 'rgba(255,255,255,0.10)' }} />
 
         {/* Preview button */}
@@ -417,6 +431,10 @@ export function TopBar() {
       <TemplatesModal
         isOpen={templatesOpen}
         onClose={() => setTemplatesOpen(false)}
+      />
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
     </header>
   );

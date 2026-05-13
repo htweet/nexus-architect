@@ -26,39 +26,40 @@ const PALETTE_GROUPS = [
   {
     label: 'Layout',
     items: [
-      { type: 'section',   label: 'Section',   icon: <Frame size={14} /> },
-      { type: 'container', label: 'Container', icon: <Square size={14} /> },
-      { type: 'columns',   label: 'Columns',   icon: <Columns size={14} /> },
-      { type: 'spacer',    label: 'Spacer',    icon: <MinusIcon size={14} /> },
+      { type: 'section',    label: 'Section',    icon: <Frame size={14} strokeWidth={1.5} /> },
+      { type: 'container',  label: 'Container',  icon: <Square size={14} strokeWidth={1.5} /> },
+      { type: 'columns',    label: 'Columns',    icon: <Columns size={14} strokeWidth={1.5} /> },
+      { type: 'nexus-grid', label: 'Grid',       icon: <LayoutGrid size={14} strokeWidth={1.5} /> },
+      { type: 'spacer',     label: 'Spacer',     icon: <MinusIcon size={14} strokeWidth={1.5} /> },
     ],
   },
   {
     label: 'Content',
     items: [
-      { type: 'heading',   label: 'Heading',   icon: <Heading1 size={14} /> },
-      { type: 'paragraph', label: 'Text',      icon: <AlignLeft size={14} /> },
-      { type: 'button',    label: 'Button',    icon: <MousePointer2 size={14} /> },
-      { type: 'image',     label: 'Image',     icon: <Image size={14} /> },
-      { type: 'divider',   label: 'Divider',   icon: <MinusIcon size={14} /> },
-      { type: 'list',      label: 'List',      icon: <List size={14} /> },
-      { type: 'icon',      label: 'Icon',      icon: <Star size={14} /> },
+      { type: 'heading',   label: 'Heading',   icon: <Heading1 size={14} strokeWidth={1.5} /> },
+      { type: 'paragraph', label: 'Text',      icon: <AlignLeft size={14} strokeWidth={1.5} /> },
+      { type: 'button',    label: 'Button',    icon: <MousePointer2 size={14} strokeWidth={1.5} /> },
+      { type: 'image',     label: 'Image',     icon: <Image size={14} strokeWidth={1.5} /> },
+      { type: 'divider',   label: 'Divider',   icon: <MinusIcon size={14} strokeWidth={1.5} /> },
+      { type: 'list',      label: 'List',      icon: <List size={14} strokeWidth={1.5} /> },
+      { type: 'icon',      label: 'Icon',      icon: <Star size={14} strokeWidth={1.5} /> },
     ],
   },
   {
     label: 'Advanced',
     items: [
-      { type: 'tabs',        label: 'Tabs',        icon: <Component size={14} /> },
-      { type: 'accordion',   label: 'Accordion',   icon: <ChevronDown size={14} /> },
-      { type: 'alert',       label: 'Alert',       icon: <Zap size={14} /> },
-      { type: 'testimonial', label: 'Testimonial', icon: <FileText size={14} /> },
-      { type: 'video',       label: 'Video',       icon: <Square size={14} /> },
-      { type: 'html',        label: 'HTML',        icon: <Type size={14} /> },
+      { type: 'tabs',        label: 'Tabs',        icon: <Component size={14} strokeWidth={1.5} /> },
+      { type: 'accordion',   label: 'Accordion',   icon: <ChevronDown size={14} strokeWidth={1.5} /> },
+      { type: 'alert',       label: 'Alert',       icon: <Zap size={14} strokeWidth={1.5} /> },
+      { type: 'testimonial', label: 'Testimonial', icon: <FileText size={14} strokeWidth={1.5} /> },
+      { type: 'video',       label: 'Video',       icon: <Square size={14} strokeWidth={1.5} /> },
+      { type: 'html',        label: 'HTML',        icon: <Type size={14} strokeWidth={1.5} /> },
     ],
   },
   {
     label: 'Forms',
     items: [
-      { type: 'nexus-auth', label: 'Login Form', icon: <LogIn size={14} /> },
+      { type: 'nexus-auth', label: 'Login Form', icon: <LogIn size={14} strokeWidth={1.5} /> },
     ],
   },
 ];
@@ -186,7 +187,7 @@ function PagesSection() {
           style={{ color: '#bbcabf' }}
           onMouseEnter={(e) => (e.currentTarget.style.color = '#dde4dd')}
           onMouseLeave={(e) => (e.currentTarget.style.color = '#bbcabf')}
-        ><Plus size={14} /></button>
+        ><Plus size={14} strokeWidth={1.5} /></button>
       </div>
       {loading ? (
         <div className="flex items-center justify-center py-3">
@@ -311,12 +312,4 @@ export function LeftPanel() {
               <div className="px-1.5">
                 {group.items
                   .filter((item) => !search || item.label.toLowerCase().includes(search.toLowerCase()))
-                  .map((item) => <PaletteItem key={item.type} {...item} />)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </aside>
-  );
-}
+                  .map((item) => <PaletteItem key={item.type} {...

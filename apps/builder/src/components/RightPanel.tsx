@@ -227,7 +227,7 @@ function AccSection({
         )}
       >
         <span className="flex items-center gap-2">
-          <Icon size={12} strokeWidth={2} className="text-[#10b77f] shrink-0" />
+          <Icon size={12} strokeWidth={1.5} className="shrink-0 transition-colors duration-150 group-data-[state=open]:text-[#10b77f] text-[#94A3B8] group-hover:text-white" />
           <span className="text-[11px] font-bold tracking-[0.08em] uppercase" style={{ color: '#7a8f7e' }}>
             {label}
           </span>
@@ -239,8 +239,8 @@ function AccSection({
           )}
         </span>
         <ChevronDown
-          size={11} strokeWidth={2}
-          className="shrink-0 transition-transform duration-[120ms] group-data-[state=open]:rotate-180"
+          size={11} strokeWidth={1.5}
+          className="shrink-0 transition-transform duration-[120ms] group-data-[state=open]:rotate-180 text-[#94A3B8] group-hover:text-white/60 group-data-[state=open]:text-[#10b77f]"
           style={{ color: '#5a7060' }}
         />
       </Accordion.Trigger>
@@ -1662,7 +1662,7 @@ function ElementProperties({ nodeId }: { nodeId: string }) {
           {tab === 'style' && (
             <>
               <BpBanner />
-              <Accordion.Root type="multiple" defaultValue={['layout','spacing','background','typography']}>
+              <Accordion.Root type="multiple" defaultValue={['layout']}>
                 <AccSection id="layout"       label="Layout"         icon={Layout}   ><LayoutControls        nodeId={nodeId} /></AccSection>
                 <AccSection id="spacing"      label="Spacing"        icon={Rows}     ><SpacingControls       nodeId={nodeId} /></AccSection>
                 <AccSection id="position"     label="Position"       icon={Move}     ><PositionControls      nodeId={nodeId} /></AccSection>

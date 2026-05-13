@@ -46,6 +46,7 @@ import { pushHistory } from '@/lib/history';
 import { useAutoSave }   from '@/hooks/useAutoSave';
 import { usePresence }   from '@/hooks/usePresence';
 import { SaveErrorToast } from '@/components/ui/SaveErrorToast';
+import { DynamicDataPicker } from '@/components/dynamic-data/DynamicDataPicker';
 
 // ─── Keyboard Shortcuts ───────────────────────────────────────────────────────
 
@@ -417,6 +418,8 @@ export function Builder() {
         </DragOverlay>
       </DndContext>
       <SaveErrorToast />
+      {/* Dynamic Data Binding modal — driven by useDynamicDataStore activePicker */}
+      {!isPreviewMode && <DynamicDataPicker />}
     </DragOverProvider>
   );
 }
