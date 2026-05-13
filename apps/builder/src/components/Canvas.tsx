@@ -4,6 +4,10 @@
  * Renders the recursive NodeRenderer tree starting from the page root node.
  * Hosts the DnD drop zone for palette items (handled via DndContext in Builder).
  * The zoom + breakpoint toolbar floats at the bottom.
+ *
+ * Phase 9 additions:
+ *   - CanvasErrorBoundary wraps NodeRenderer for crash recovery
+ *   - PerformanceOverlay shown in DEV mode only (zero prod footprint)
  */
 
 import { useCallback, useRef } from 'react';
@@ -12,8 +16,10 @@ import { LayoutGrid, Wand2, Maximize2, Minus, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/Button';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { NodeRenderer } from '@/components/canvas/NodeRenderer';
-import { BreadcrumbBar } from '@/components/canvas/BreadcrumbBar';
+import { NodeRenderer }        from '@/components/canvas/NodeRenderer';
+import { BreadcrumbBar }       from '@/components/canvas/BreadcrumbBar';
+import { CanvasErrorBoundary } from '@/components/canvas/CanvasErrorBoundary';
+import { PerformanceOverlay }  from '@/components/canvas/PerformanceOverlay';
 import {
   useUIStore,
   useCanvasStore,
@@ -213,6 +219,7 @@ export function Canvas() {
   const activeBreakpoint = useUIStore((s) => s.activeBreakpoint);
   const isPreviewMode    = useUIStore((s) => s.isPreviewMode);
   const page             = useCanvasStore((s) => s.page);
+  const clearCanvas      = useCanvasStore((s) => s.clearCanvas);
   const clearSelection   = useSelectionStore((s) => s.clearSelection);
 
   const containerRef = useRef<HTMLElement | null>(null);
@@ -232,6 +239,12 @@ export function Canvas() {
     },
     [clearSelection],
   );
+
+  // Clear canvas handler passed to error boundary for recovery UI
+  const handleClearCanvas = useCallback(() => {
+    clearSelection();
+    clearCanvas?.();
+  }, [clearCanvas, clearSelection]);
 
   return (
     <main
@@ -270,7 +283,9 @@ export function Canvas() {
           }}
         >
           {hasContent ? (
-            <NodeRenderer nodeId={page.rootNodeId} isPreview={isPreviewMode} />
+            <CanvasErrorBoundary onClearCanvas={handleClearCanvas}>
+              <NodeRenderer nodeId={page.rootNodeId} isPreview={isPreviewMode} />
+            </CanvasErrorBoundary>
           ) : (
             <EmptyCanvasState />
           )}
@@ -281,6 +296,9 @@ export function Canvas() {
       </div>
 
       {!isPreviewMode && <CanvasToolbar containerRef={containerRef} />}
+
+      {/* Dev-only performance monitor -- zero production footprint */}
+      {!isPreviewMode && import.meta.env.DEV && <PerformanceOverlay />}
     </main>
   );
 }

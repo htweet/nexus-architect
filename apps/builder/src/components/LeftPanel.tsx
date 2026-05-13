@@ -19,6 +19,7 @@ import {
 import { useAdapter } from '@/contexts/AdapterContext';
 import { getWidget } from '@/widgets/registry';
 import { AiPanel } from '@/components/panels/AiPanel';
+import { LayersTree } from '@/components/layers/LayersTree';
 
 type PanelTab = 'layers' | 'widgets' | 'ai';
 
@@ -290,11 +291,7 @@ export function LeftPanel() {
             <div className="px-3.5 py-1.5">
               <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#bbcabf' }}>Layers</span>
             </div>
-            {!page ? (
-              <p className="px-3.5 py-2 text-[13px] italic" style={{ color: '#bbcabf' }}>No page open</p>
-            ) : (
-              <LayerNode nodeId={page.rootNodeId} />
-            )}
+            <LayersTree search={search} />
           </div>
         </div>
       )}
@@ -312,4 +309,12 @@ export function LeftPanel() {
               <div className="px-1.5">
                 {group.items
                   .filter((item) => !search || item.label.toLowerCase().includes(search.toLowerCase()))
-                  .map((item) => <PaletteItem key={item.type} {...
+                  .map((item) => <PaletteItem key={item.type} {...item} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}

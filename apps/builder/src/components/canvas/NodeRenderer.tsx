@@ -9,12 +9,16 @@
  *
  *   Root node: rendered bare (no selection chrome) — it IS the canvas.
  *   All other nodes: wrapped in CanvasNodeWrapper for selection/DnD chrome.
+ *
+ * Phase 9.2: Every render path is wrapped in WidgetErrorBoundary so that
+ *   a single broken widget cannot crash the entire canvas tree.
  */
 
 import { memo } from 'react';
 import { useCanvasStore } from '@nexus/core';
 import { getWidget }      from '@/widgets/registry';
-import { CanvasNodeWrapper } from './CanvasNodeWrapper';
+import { CanvasNodeWrapper }   from './CanvasNodeWrapper';
+import { WidgetErrorBoundary } from './WidgetErrorBoundary';
 
 interface NodeRendererProps {
   nodeId: string;
@@ -40,12 +44,18 @@ export const NodeRenderer = memo(function NodeRenderer({ nodeId, isPreview }: No
 
   // Root is special — no chrome, no DnD wrapper
   if (node.type === 'root') {
-    return <widgetDef.Renderer nodeId={nodeId} isPreview={isPreview} />;
+    return (
+      <WidgetErrorBoundary nodeId={nodeId} nodeType={node.type} isPreview={isPreview ?? false}>
+        <widgetDef.Renderer nodeId={nodeId} isPreview={isPreview} />
+      </WidgetErrorBoundary>
+    );
   }
 
   return (
-    <CanvasNodeWrapper nodeId={nodeId} isPreview={isPreview}>
-      <widgetDef.Renderer nodeId={nodeId} isPreview={isPreview} />
-    </CanvasNodeWrapper>
+    <WidgetErrorBoundary nodeId={nodeId} nodeType={node.type} isPreview={isPreview ?? false}>
+      <CanvasNodeWrapper nodeId={nodeId} isPreview={isPreview}>
+        <widgetDef.Renderer nodeId={nodeId} isPreview={isPreview} />
+      </CanvasNodeWrapper>
+    </WidgetErrorBoundary>
   );
 });

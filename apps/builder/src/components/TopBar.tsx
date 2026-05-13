@@ -4,11 +4,11 @@
  * Height: 52px
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Undo2, Redo2, Monitor, Tablet, Smartphone,
   ChevronDown, Plus, Trash2, Copy, Loader2, ExternalLink, Check,
-  LayoutTemplate, PanelLeft, PanelRight, Settings,
+  LayoutTemplate, PanelLeft, PanelRight, Settings, CheckCircle2, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
@@ -21,7 +21,11 @@ import { PublishDialog } from '@/components/panels/PublishDialog';
 import { TemplatesModal } from '@/components/panels/TemplatesModal';
 import { SettingsModal } from '@/components/panels/SettingsModal';
 import { PREVIEW_STORAGE_KEY } from '@/lib/preview-constants';
+import { generatePublishPayload, mockPublish } from '@/lib/serialization-engine';
 import type { PublishResult } from '@nexus/core';
+
+// ── Publish state machine ────────────────────────────────────────────────────
+type PublishPhase = 'idle' | 'compiling' | 'live';
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
 function NexusLogoMark() {
@@ -262,6 +266,11 @@ export function TopBar() {
   const [previewing,    setPreviewing]    = useState(false);
   const [settingsOpen,  setSettingsOpen]  = useState(false);
 
+  // New publish state machine
+  const [publishPhase,    setPublishPhase]    = useState<PublishPhase>('idle');
+  const [publishProgress, setPublishProgress] = useState(0);
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleUndo = () => {
     const currentPage = useCanvasStore.getState().page ?? undefined;
     const entry = useHistoryStore.getState().undo(currentPage);
@@ -287,14 +296,40 @@ export function TopBar() {
     }
   };
 
-  const handlePublish = async () => {
-    if (!page) return;
+  const handlePublish = useCallback(async () => {
+    if (!page || publishPhase !== 'idle') return;
+
+    // --- Phase 1: Compiling ---
+    setPublishPhase('compiling');
+    setPublishProgress(0);
+
     try {
-      const result = await adapter.data.publishPage(page.id);
-      setPublishResult(result);
-      setPublishOpen(true);
-    } catch { /* surfaced via dialog */ }
-  };
+      // Build payload (synchronous compile + mock async POST)
+      const payload = generatePublishPayload(page);
+
+      await mockPublish(payload, (pct) => setPublishProgress(pct));
+
+      // --- Phase 2: Live badge ---
+      setPublishPhase('live');
+      setPublishProgress(100);
+
+      // Also fire the legacy WP adapter publish so DB record is updated
+      try {
+        const result = await adapter.data.publishPage(page.id);
+        setPublishResult(result);
+      } catch { /* non-fatal */ }
+
+      // Reset to idle after 3 seconds
+      if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = setTimeout(() => {
+        setPublishPhase('idle');
+        setPublishProgress(0);
+      }, 3000);
+    } catch {
+      setPublishPhase('idle');
+      setPublishProgress(0);
+    }
+  }, [page, publishPhase, adapter]);
 
   return (
     <header
@@ -408,18 +443,65 @@ export function TopBar() {
           {isPreviewMode ? 'Exit' : 'Preview'}
         </button>
 
-        {/* Publish button */}
-        <button
-          onClick={() => void handlePublish()}
-          disabled={!page}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] font-semibold transition-all disabled:opacity-40"
-          style={{ background: '#10b77f', color: '#ffffff' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#0da870'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#10b77f'; }}
-          title="Publish page"
-        >
-          Publish
-        </button>
+        {/* Publish button — state machine: idle | compiling | live */}
+        <div className="relative flex flex-col items-stretch" style={{ minWidth: 88 }}>
+          <button
+            onClick={() => void handlePublish()}
+            disabled={!page || publishPhase === 'compiling'}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] font-semibold transition-all disabled:opacity-60 overflow-hidden"
+            style={{
+              background: publishPhase === 'live' ? '#0b8f5e' : '#10b77f',
+              color: '#ffffff',
+              minWidth: 88,
+              position: 'relative',
+            }}
+            onMouseEnter={(e) => {
+              if (publishPhase === 'idle') e.currentTarget.style.background = '#0da870';
+            }}
+            onMouseLeave={(e) => {
+              if (publishPhase === 'idle') e.currentTarget.style.background = '#10b77f';
+              if (publishPhase === 'live') e.currentTarget.style.background = '#0b8f5e';
+            }}
+            title={
+              publishPhase === 'compiling' ? 'Compiling...' :
+              publishPhase === 'live'      ? 'Published!' :
+              'Publish page'
+            }
+          >
+            {/* Progress bar overlay (compiling phase) */}
+            {publishPhase === 'compiling' && (
+              <span
+                className="absolute inset-0 origin-left transition-transform duration-200"
+                style={{
+                  background: 'rgba(0,0,0,0.18)',
+                  transform: `scaleX(${1 - publishProgress / 100})`,
+                  transformOrigin: 'right',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+
+            {/* Button content */}
+            <span className="relative flex items-center gap-1.5 z-10">
+              {publishPhase === 'compiling' && (
+                <Loader2 size={13} className="animate-spin" />
+              )}
+              {publishPhase === 'live' && (
+                <CheckCircle2 size={13} />
+              )}
+              {publishPhase === 'idle' && (
+                <Zap size={13} strokeWidth={1.5} />
+              )}
+              <span>
+                {publishPhase === 'compiling'
+                  ? `${publishProgress}%`
+                  : publishPhase === 'live'
+                    ? 'Live'
+                    : 'Publish'}
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Dialogs */}

@@ -8,3 +8,6 @@ export * from './store/index.js';
 export * from './compiler/index.js';
 
 export * from './hooks/index.js';
+
+// Security (Phase 9.2 — schema validation + sanitization)
+export * from './security/validator.js';
