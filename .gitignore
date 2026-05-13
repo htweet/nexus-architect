@@ -1,40 +1,51 @@
 # Dependencies
-node_modules/
+node_modules
 .pnp
 .pnp.js
 
 # Build outputs
-dist/
-build/
-.turbo/
-*.tsbuildinfo
+dist
+build
+.next
+out
+storybook-static
+
+# Turbo
+.turbo
 
 # Environment
 .env
 .env.local
-.env.*.local
-
-# Cache
-.cache/
-.vite/
-.eslintcache
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
 
 # OS
 .DS_Store
 Thumbs.db
 
 # IDE
-.vscode/
-.idea/
+.idea
+.vscode
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
+*.sw?
+
+# Testing
+coverage
+playwright-report
+test-results
+.playwright
 
 # Logs
+logs
 *.log
-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Test artifacts
-playwright-report/
-test-results/
+# TypeScript
+*.tsbuildinfo
