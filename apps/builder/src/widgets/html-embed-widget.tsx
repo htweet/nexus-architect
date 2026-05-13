@@ -1,27 +1,17 @@
 /**
- * HTML Embed widget — arbitrary HTML/CSS/JS snippet rendered in a sandboxed
- * iframe so embedded code cannot interact with the builder's own DOM.
- *
- * Security model:
- *   • srcdoc + sandbox="allow-scripts allow-same-origin" on the iframe.
- *   • In builder mode we show a read-only code preview + placeholder frame.
- *   • In preview / publish mode the iframe renders with full scripts allowed.
- *
- * The inspector uses a <textarea> so multi-line HTML is comfortable to edit.
+ * HTML Embed widget — arbitrary HTML/CSS/JS snippet rendered in a sandboxed iframe.
  */
 
 import { memo } from 'react';
 import { Code2 } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorTextarea, InspectorInput, InspectorToggle, InspectorSection } from './shared';
+import { InspectorTextarea, InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export interface HtmlEmbedWidgetProps {
-  html:        string;
-  height:      string;  // CSS height, e.g. "200px"
-  scrollable:  boolean;
+  html:       string;
+  height:     string;
+  scrollable: boolean;
 }
 
 const DEFAULTS: HtmlEmbedWidgetProps = {
@@ -30,23 +20,20 @@ const DEFAULTS: HtmlEmbedWidgetProps = {
   scrollable: false,
 };
 
-// ─── Canvas Placeholder (builder mode) ───────────────────────────────────────
-
 function CodePreview({ html }: { html: string }) {
   const preview = html.trim().slice(0, 120) + (html.length > 120 ? '…' : '');
   return (
     <div
       className="w-full h-full flex flex-col items-center justify-center gap-2 rounded-md"
       style={{
-        background:  '#09100c',
-        border:      '1px dashed rgba(255,255,255,0.10)',
-        minHeight:   '80px',
+        background: 'rgba(255,255,255,0.03)',
+        border: '2px dashed rgba(255,255,255,0.12)',
+        padding: '16px',
       }}
     >
-      <Code2 size={22} style={{ color: '#bbcabf', opacity: 0.6 }} />
+      <Code2 size={28} style={{ color: '#bbcabf', opacity: 0.5 }} strokeWidth={1.5} />
       {html.trim() ? (
-        <pre
-          className="text-[10px] leading-snug max-w-[90%] overflow-hidden text-ellipsis whitespace-pre-wrap text-center"
+        <pre className="text-[10px] text-[#bbcabf] opacity-70 max-w-full overflow-hidden text-ellipsis whitespace-pre-wrap break-all"
           style={{ color: '#bbcabf', fontFamily: 'monospace' }}
         >
           {preview}
@@ -60,8 +47,6 @@ function CodePreview({ html }: { html: string }) {
   );
 }
 
-// ─── Renderer ─────────────────────────────────────────────────────────────────
-
 const HtmlEmbedWidgetRenderer = memo(function HtmlEmbedWidgetRenderer({
   nodeId,
   isPreview,
@@ -70,43 +55,38 @@ const HtmlEmbedWidgetRenderer = memo(function HtmlEmbedWidgetRenderer({
   if (!node) return null;
 
   const p = { ...DEFAULTS, ...(node.props as Partial<HtmlEmbedWidgetProps>) };
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   if (!isPreview) {
     return (
-      <div style={{ width: '100%', height: p.height }}>
+      <div style={{ width: '100%', height: p.height, ...visualOverrides }}>
         <CodePreview html={p.html} />
       </div>
     );
   }
 
-  // Preview / publish: render in sandboxed iframe
   return (
     <iframe
       title="HTML Embed"
       srcDoc={p.html}
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       style={{
-        width:      '100%',
-        height:     p.height,
-        border:     'none',
-        display:    'block',
-        overflow:   p.scrollable ? 'auto' : 'hidden',
-        background: 'transparent',
+        width:    '100%',
+        height:   p.height,
+        border:   'none',
+        overflow: p.scrollable ? 'auto' : 'hidden',
+        ...visualOverrides,
       }}
     />
   );
 });
 
-// ─── Inspector ────────────────────────────────────────────────────────────────
-
 function HtmlEmbedWidgetInspector({ nodeId }: WidgetInspectorProps) {
   const node   = useCanvasStore((s) => s.page?.nodeMap[nodeId]);
   const update = useCanvasStore((s) => s.updateNodeProps);
   if (!node) return null;
-
   const p   = { ...DEFAULTS, ...(node.props as Partial<HtmlEmbedWidgetProps>) };
-  const set = (k: keyof HtmlEmbedWidgetProps) => (v: string | boolean) =>
-    update(nodeId, { [k]: v });
+  const set = (k: keyof HtmlEmbedWidgetProps) => (v: string) => update(nodeId, { [k]: v });
 
   return (
     <div className="px-3 pb-3 flex flex-col gap-2.5">
@@ -114,41 +94,34 @@ function HtmlEmbedWidgetInspector({ nodeId }: WidgetInspectorProps) {
       <InspectorTextarea
         label="HTML / CSS / JS"
         value={p.html}
-        onChange={set('html') as (v: string) => void}
-        placeholder={'<div style="color:red">Hello world</div>'}
-        rows={8}
+        onChange={set('html')}
+        placeholder="<div>Hello world</div>"
+        rows={6}
       />
-
-      <InspectorSection label="Frame" />
       <InspectorInput
         label="Height"
         value={p.height}
-        onChange={set('height') as (v: string) => void}
+        onChange={set('height')}
         placeholder="200px"
-        hint="Any CSS height value — px, vh, em…"
+        hint="Fixed height for the embed container"
       />
       <InspectorToggle
         label="Scrollable"
         value={p.scrollable ? 'yes' : 'no'}
-        options={[
-          { value: 'no',  label: 'Clip'   },
-          { value: 'yes', label: 'Scroll' },
-        ]}
+        options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]}
         onChange={(v) => update(nodeId, { scrollable: v === 'yes' })}
       />
     </div>
   );
 }
 
-// ─── Definition ───────────────────────────────────────────────────────────────
-
 export const HtmlEmbedWidget: WidgetDefinition = {
   type:         'html-embed',
   label:        'HTML Embed',
   icon:         Code2,
-  category:     'media',
+  category:     'content',
   defaultProps: DEFAULTS as unknown as Record<string, unknown>,
-  keywords:     ['html', 'code', 'embed', 'custom', 'script', 'iframe', 'raw'],
+  keywords:     ['html', 'embed', 'code', 'custom', 'iframe', 'script'],
   Renderer:     HtmlEmbedWidgetRenderer,
   Inspector:    HtmlEmbedWidgetInspector,
 };

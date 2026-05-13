@@ -10,7 +10,7 @@
 import { memo, useRef, useCallback, useEffect } from 'react';
 import { AlignLeft } from 'lucide-react';
 import { useCanvasStore, useSelectionStore } from '@nexus/core';
-import { InspectorInput, InspectorSection } from './shared';
+import { InspectorInput, InspectorSection, getVisualNodeStyles } from './shared';
 import { FloatingTextToolbar } from '@/components/canvas/FloatingTextToolbar';
 import { pushHistory } from '@/lib/history';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
@@ -49,6 +49,8 @@ const ParagraphRenderer = memo(function ParagraphRenderer({ nodeId, isPreview }:
 
   const p = { ...DEFAULTS, ...(node.props as Partial<ParagraphProps>) };
 
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
+
   const sharedStyle: React.CSSProperties = {
     textAlign:  p.align as React.CSSProperties['textAlign'],
     color:      p.color,
@@ -56,6 +58,7 @@ const ParagraphRenderer = memo(function ParagraphRenderer({ nodeId, isPreview }:
     fontWeight: p.fontWeight,
     lineHeight: p.lineHeight,
     maxWidth:   p.maxWidth || undefined,
+    ...visualOverrides, // RightPanel Style tab wins
   };
 
   // Enter edit mode: load stored HTML and focus

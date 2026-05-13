@@ -6,7 +6,7 @@
 import { memo } from 'react';
 import { MousePointerClick } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorToggle, InspectorSelect, InspectorSection } from './shared';
+import { InspectorInput, InspectorToggle, InspectorSelect, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface ButtonWidgetProps {
@@ -47,6 +47,7 @@ const ButtonWidgetRenderer = memo(function ButtonWidgetRenderer({ nodeId, isPrev
 
   const p   = { ...DEFAULTS, ...(node.props as Partial<ButtonWidgetProps>) };
   const Tag = p.href && isPreview ? 'a' : 'button';
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   return (
     <div className={p.fullWidth ? 'w-full' : 'inline-flex'}>
@@ -72,6 +73,7 @@ const ButtonWidgetRenderer = memo(function ButtonWidgetRenderer({ nodeId, isPrev
                 return [key, v.join(':').trim()];
               })
           ),
+          ...visualOverrides, // RightPanel Style tab wins
         }}
         {...(p.href && isPreview ? { href: p.href } : {})}
       >

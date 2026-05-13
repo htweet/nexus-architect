@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { Info, CheckCircle2, AlertTriangle, XCircle, Bell } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorToggle, InspectorSection } from './shared';
+import { InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export type AlertVariant = 'info' | 'success' | 'warning' | 'error';
@@ -39,12 +39,14 @@ const AlertRenderer = memo(function AlertRenderer({ nodeId }: WidgetRendererProp
   const p = { ...DEFAULTS, ...(node.props as Partial<AlertProps>) };
   const s = VARIANT_STYLES[p.variant];
   const IconComp = VARIANT_ICONS[p.variant];
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   return (
     <div style={{
       display: 'flex', gap: '12px', padding: '16px 20px',
       background: s.bg, border: `1px solid ${s.border}`,
       borderRadius: '8px', width: '100%',
+      ...visualOverrides,
     }}>
       <IconComp size={20} style={{ color: s.icon, flexShrink: 0, marginTop: '2px' }} />
       <div style={{ flex: 1, minWidth: 0 }}>

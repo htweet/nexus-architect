@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { List } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorToggle, InspectorSection } from './shared';
+import { InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface ListProps {
@@ -41,6 +41,7 @@ const ListRenderer = memo(function ListRenderer({ nodeId }: WidgetRendererProps)
   if (!node) return null;
   const p = { ...DEFAULTS, ...(node.props as Partial<ListProps>) };
   const items = p.items.split('\n').filter(Boolean);
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   return (
     <ul
@@ -53,6 +54,7 @@ const ListRenderer = memo(function ListRenderer({ nodeId }: WidgetRendererProps)
         gap:       p.gap,
         color:     p.color || undefined,
         fontSize:  p.fontSize,
+        ...visualOverrides,
       }}
     >
       {items.map((item, i) => (

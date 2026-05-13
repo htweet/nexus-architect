@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { Quote } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorToggle, InspectorSection } from './shared';
+import { InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface TestimonialProps {
@@ -20,7 +20,7 @@ export interface TestimonialProps {
 }
 
 const DEFAULTS: TestimonialProps = {
-  quote:       'This product has completely transformed how our team works. The results speak for themselves — we\'ve seen a 40% increase in productivity since switching.',
+  quote:       "This product has completely transformed how our team works. The results speak for themselves — we've seen a 40% increase in productivity since switching.",
   author:      'Sarah Johnson',
   role:        'Head of Product',
   company:     'Acme Inc.',
@@ -44,7 +44,8 @@ const TestimonialRenderer = memo(function TestimonialRenderer({ nodeId }: Widget
   const node = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
   if (!node) return null;
   const p = { ...DEFAULTS, ...(node.props as Partial<TestimonialProps>) };
-  const initials = p.author.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const initials = p.author.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   const isCard     = p.layout === 'card';
   const isCentered = p.layout === 'centered';
@@ -58,21 +59,15 @@ const TestimonialRenderer = memo(function TestimonialRenderer({ nodeId }: Widget
       textAlign:     isCentered ? 'center' : 'left',
       width:         '100%',
       boxShadow:     isCard ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+      ...visualOverrides,
     }}>
-      {/* Quote icon */}
       <Quote size={24} style={{ color: p.accentColor, marginBottom: '12px', ...(isCentered ? { margin: '0 auto 12px' } : {}) }} />
-
-      {/* Stars */}
       <div style={{ marginBottom: '12px', ...(isCentered ? { display: 'flex', justifyContent: 'center' } : {}) }}>
         <StarRating count={p.rating} color={p.accentColor} />
       </div>
-
-      {/* Quote text */}
       <p style={{ fontSize: '16px', lineHeight: 1.7, color: '#374151', marginBottom: '20px', fontStyle: 'italic' }}>
         "{p.quote}"
       </p>
-
-      {/* Author row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', ...(isCentered ? { justifyContent: 'center' } : {}) }}>
         <div style={{
           width: '40px', height: '40px', borderRadius: '50%',

@@ -5,8 +5,9 @@
 import { memo } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { Zap } from 'lucide-react';
+import React from 'react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorToggle, InspectorSection } from './shared';
+import { InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface IconBoxProps {
@@ -45,6 +46,7 @@ const IconBoxRenderer = memo(function IconBoxRenderer({ nodeId }: WidgetRenderer
   const node = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
   if (!node) return null;
   const p = { ...DEFAULTS, ...(node.props as Partial<IconBoxProps>) };
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   const IconComp = ((LucideIcons as Record<string, unknown>)[p.iconName] as React.FC<{ size: number; color: string }>) || Zap;
   const isCircle = p.iconShape === 'circle';
@@ -78,6 +80,7 @@ const IconBoxRenderer = memo(function IconBoxRenderer({ nodeId }: WidgetRenderer
     <div style={{
       padding:    p.padding,
       textAlign:  p.iconPos === 'top' ? p.align : 'left',
+      ...visualOverrides,
     }}>
       {p.iconPos === 'left' ? (
         <div style={{ display: 'flex', gap: p.gap, alignItems: 'flex-start' }}>
@@ -144,8 +147,6 @@ function IconBoxInspector({ nodeId }: WidgetInspectorProps) {
     </div>
   );
 }
-
-import React from 'react';
 
 export const IconBoxWidget: WidgetDefinition = {
   type:         'icon-box',

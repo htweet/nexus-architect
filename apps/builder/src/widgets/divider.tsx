@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Minus } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorSelect, InspectorSection, InspectorColor } from './shared';
+import { InspectorInput, InspectorSelect, InspectorSection, InspectorColor, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface DividerProps {
@@ -17,8 +17,9 @@ const DividerRenderer = memo(function DividerRenderer({ nodeId }: WidgetRenderer
   const node = useCanvasStore((s) => s.page?.nodeMap[nodeId]);
   if (!node) return null;
   const p = { ...DEFAULTS, ...(node.props as Partial<DividerProps>) };
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
   return (
-    <hr style={{ borderStyle: p.style, borderColor: p.color, borderTopWidth: p.thickness, width: p.width, margin: p.margin }} />
+    <hr style={{ borderStyle: p.style, borderColor: p.color, borderTopWidth: p.thickness, width: p.width, margin: p.margin, ...visualOverrides }} />
   );
 });
 

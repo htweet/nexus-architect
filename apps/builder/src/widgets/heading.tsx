@@ -13,7 +13,7 @@
 import { memo, useRef, useCallback, useEffect } from 'react';
 import { Heading1 } from 'lucide-react';
 import { useCanvasStore, useSelectionStore } from '@nexus/core';
-import { InspectorInput, InspectorSelect, InspectorSection } from './shared';
+import { InspectorInput, InspectorSelect, InspectorSection, getVisualNodeStyles } from './shared';
 import { FloatingTextToolbar } from '@/components/canvas/FloatingTextToolbar';
 import { pushHistory } from '@/lib/history';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
@@ -64,6 +64,11 @@ const HeadingRenderer = memo(function HeadingRenderer({ nodeId, isPreview }: Wid
   const p   = { ...DEFAULTS, ...(node.props as Partial<HeadingProps>) };
   const Tag = p.level;
 
+  // Merge RightPanel style overrides (node.styles.base) on top of prop defaults.
+  // getVisualNodeStyles filters out layout-only props (margin, padding, etc.)
+  // to prevent doubling with the CanvasNodeWrapper wrapper styles.
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
+
   const sharedStyle: React.CSSProperties = {
     textAlign:     p.align,
     color:         p.color,
@@ -71,6 +76,7 @@ const HeadingRenderer = memo(function HeadingRenderer({ nodeId, isPreview }: Wid
     fontWeight:    p.fontWeight,
     lineHeight:    p.lineHeight,
     letterSpacing: p.letterSpacing,
+    ...visualOverrides, // RightPanel Style tab wins
   };
 
   // ── Enter edit mode: focus + place cursor at end ──────────────────────────

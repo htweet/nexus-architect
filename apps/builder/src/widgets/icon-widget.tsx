@@ -5,8 +5,9 @@
 import { memo } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { Star } from 'lucide-react';
+import React from 'react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorToggle, InspectorSection } from './shared';
+import { InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface IconProps {
@@ -39,8 +40,10 @@ const IconRenderer = memo(function IconRenderer({ nodeId, isPreview }: WidgetRen
     ? <IconComp size={p.size} color={p.color} />
     : <Star size={p.size} color={p.color} />;
 
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
+
   return (
-    <div style={{ padding: p.padding, textAlign: p.align as 'left' | 'center' | 'right' }}>
+    <div style={{ padding: p.padding, textAlign: p.align as 'left' | 'center' | 'right', ...visualOverrides }}>
       {p.link && !isPreview
         ? <span style={{ cursor: 'pointer', display: 'inline-block' }}>{icon}</span>
         : p.link
@@ -79,8 +82,6 @@ function IconInspector({ nodeId }: WidgetInspectorProps) {
     </div>
   );
 }
-
-import React from 'react';
 
 export const IconWidget: WidgetDefinition = {
   type:         'icon',

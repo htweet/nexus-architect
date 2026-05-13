@@ -10,7 +10,7 @@ import { LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useCanvasStore } from '@nexus/core';
 import { NodeRenderer } from '@/components/canvas/NodeRenderer';
-import { InspectorToggle, InspectorSection } from './shared';
+import { InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 // ─── Default props ────────────────────────────────────────────────────────────
@@ -48,8 +48,8 @@ const ContainerRenderer = memo(function ContainerRenderer({ nodeId, isPreview }:
 
   const p = { ...DEFAULTS, ...(node.props as Partial<ContainerProps>) };
   const strategy = p.direction === 'row' ? horizontalListSortingStrategy : verticalListSortingStrategy;
-  // Filter out any stale falsy entries that may appear in the children array
   const validChildren = node.children.filter(Boolean) as string[];
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   return (
     <div
@@ -66,6 +66,7 @@ const ContainerRenderer = memo(function ContainerRenderer({ nodeId, isPreview }:
         padding:        p.padding,
         background:     p.background || undefined,
         minHeight:      p.minHeight,
+        ...visualOverrides, // RightPanel Style tab wins
       }}
     >
       <SortableContext items={validChildren} strategy={strategy}>

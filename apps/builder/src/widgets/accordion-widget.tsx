@@ -5,7 +5,7 @@
 import { memo, useState } from 'react';
 import { ChevronDown, PanelTopOpen } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput, InspectorSection } from './shared';
+import { InspectorInput, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 interface AccordionItem { q: string; a: string; }
@@ -17,7 +17,7 @@ export interface AccordionProps {
   bgColor:     string;
   borderColor: string;
   fontSize:    string;
-  defaultOpen: number; // index of item open by default, -1 = none
+  defaultOpen: number;
 }
 
 const DEFAULT_ITEMS: AccordionItem[] = [
@@ -44,12 +44,13 @@ const AccordionRenderer = memo(function AccordionRenderer({ nodeId }: WidgetRend
   });
   if (!node) return null;
   const p = { ...DEFAULTS, ...(node.props as Partial<AccordionProps>) };
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   let items: AccordionItem[] = DEFAULT_ITEMS;
   try { items = JSON.parse(p.items); } catch { /* use default */ }
 
   return (
-    <div style={{ width: '100%', borderRadius: '6px', overflow: 'hidden', border: `1px solid ${p.borderColor}` }}>
+    <div style={{ width: '100%', borderRadius: '6px', overflow: 'hidden', border: `1px solid ${p.borderColor}`, ...visualOverrides }}>
       {items.map((item, i) => (
         <div key={i} style={{ borderBottom: i < items.length - 1 ? `1px solid ${p.borderColor}` : 'none' }}>
           <button
@@ -93,39 +94,27 @@ function AccordionInspector({ nodeId }: WidgetInspectorProps) {
   const node   = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
   const update = useCanvasStore((s) => s.updateNodeProps);
   if (!node) return null;
-  const p = { ...DEFAULTS, ...(node.props as Partial<AccordionProps>) };
-
-  let items: AccordionItem[] = DEFAULT_ITEMS;
-  try { items = JSON.parse(p.items); } catch { /* use default */ }
-
-  const updateItem = (idx: number, field: 'q' | 'a', val: string) => {
-    const next = [...items];
-    next[idx] = { ...next[idx], [field]: val } as AccordionItem;
-    update(nodeId, { items: JSON.stringify(next) });
-  };
-  const addItem    = () => update(nodeId, { items: JSON.stringify([...items, { q: 'New question', a: 'Answer here…' }]) });
-  const removeItem = (idx: number) => update(nodeId, { items: JSON.stringify(items.filter((_, i) => i !== idx)) });
+  const p   = { ...DEFAULTS, ...(node.props as Partial<AccordionProps>) };
+  const set = (k: keyof AccordionProps) => (v: string) => update(nodeId, { [k]: v });
 
   return (
     <div className="px-3 pb-3 flex flex-col gap-2.5">
       <InspectorSection label="Accordion" />
-      {items.map((item, i) => (
-        <div key={i} className="flex flex-col gap-1 p-2 rounded bg-white/5 border border-white/10">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#bbcabf]">Item {i + 1}</span>
-            <button onClick={() => removeItem(i)} className="text-[#ffb4ab] text-xs hover:opacity-80">✕</button>
-          </div>
-          <input value={item.q} onChange={(e) => updateItem(i, 'q', e.target.value)}
-            placeholder="Question" className="w-full bg-[#09100c] border border-white/10 rounded px-2 py-1 text-xs text-[#dde4dd] focus:outline-none focus:border-[#50dea3]" />
-          <textarea value={item.a} onChange={(e) => updateItem(i, 'a', e.target.value)}
-            placeholder="Answer" rows={2} className="w-full bg-[#09100c] border border-white/10 rounded px-2 py-1 text-xs text-[#dde4dd] resize-none focus:outline-none focus:border-[#50dea3]" />
-        </div>
-      ))}
-      <button onClick={addItem} className="w-full py-1.5 rounded border border-dashed border-white/20 text-[#bbcabf] text-xs hover:border-white/40 transition-colors">
-        + Add Item
-      </button>
-      <InspectorInput label="Accent Color"  value={p.accentColor}  onChange={(v) => update(nodeId, { accentColor: v })}  placeholder="#10b77f" />
-      <InspectorInput label="Border Color"  value={p.borderColor}  onChange={(v) => update(nodeId, { borderColor: v })}  placeholder="#e5e7eb" />
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-[#bbcabf]">Items (JSON)</span>
+        <textarea
+          value={p.items}
+          onChange={(e) => update(nodeId, { items: e.target.value })}
+          rows={5}
+          className="w-full bg-[#09100c] border border-white/10 rounded px-2 py-1.5 text-[11px] text-[#dde4dd] font-mono resize-none focus:outline-none focus:border-[#50dea3]"
+        />
+        <span className="text-[10px] text-[#bbcabf]">Format: [{"{"}"q":"Question","a":"Answer"{"}"}]</span>
+      </div>
+      <InspectorInput label="Accent Color" value={p.accentColor} onChange={set('accentColor')} placeholder="#10b77f" />
+      <InspectorInput label="Text Color"   value={p.textColor}   onChange={set('textColor')}   placeholder="#1a1a1a" />
+      <InspectorInput label="Bg Color"     value={p.bgColor}     onChange={set('bgColor')}     placeholder="#ffffff" />
+      <InspectorInput label="Border Color" value={p.borderColor} onChange={set('borderColor')} placeholder="#e5e7eb" />
+      <InspectorInput label="Font Size"    value={p.fontSize}    onChange={set('fontSize')}    placeholder="15px" />
     </div>
   );
 }
@@ -134,7 +123,7 @@ export const AccordionWidget: WidgetDefinition = {
   type:         'accordion',
   label:        'Accordion',
   icon:         PanelTopOpen,
-  category:     'interactive',
+  category:     'content',
   defaultProps: DEFAULTS as unknown as Record<string, unknown>,
   keywords:     ['accordion', 'faq', 'collapse', 'expand', 'toggle'],
   Renderer:     AccordionRenderer,

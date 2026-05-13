@@ -10,6 +10,7 @@ import { RectangleHorizontal } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useCanvasStore } from '@nexus/core';
 import { NodeRenderer } from '@/components/canvas/NodeRenderer';
+import { InspectorInput, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface SectionProps {
@@ -52,6 +53,7 @@ const SectionRenderer = memo(function SectionRenderer({ nodeId, isPreview }: Wid
         backgroundPosition: 'center',
         minHeight:       p.minHeight,
         color:           p.textColor || undefined,
+        ...getVisualNodeStyles(node.styles?.base as Record<string, string>), // RightPanel wins
       }}
     >
       <div

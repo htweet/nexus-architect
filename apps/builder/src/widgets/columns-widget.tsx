@@ -10,17 +10,15 @@ import { Columns2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useCanvasStore } from '@nexus/core';
 import { NodeRenderer } from '@/components/canvas/NodeRenderer';
-import { InspectorInput, InspectorToggle, InspectorSection } from './shared';
+import { InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps, ChildNodeSpec } from './registry';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 export interface ColumnsProps {
-  columnCount: number;
-  gap:         string;
-  padding:     string;
-  background:  string;
-  minHeight:   string;
+  columnCount:   number;
+  gap:           string;
+  padding:       string;
+  background:    string;
+  minHeight:     string;
   verticalAlign: string;
 }
 
@@ -32,8 +30,6 @@ const DEFAULTS: ColumnsProps = {
   minHeight:     '80px',
   verticalAlign: 'stretch',
 };
-
-// ─── Single droppable column slot ─────────────────────────────────────────────
 
 const ColumnSlot = memo(function ColumnSlot({ nodeId, isPreview }: WidgetRendererProps) {
   const node = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
@@ -66,14 +62,13 @@ const ColumnSlot = memo(function ColumnSlot({ nodeId, isPreview }: WidgetRendere
   );
 });
 
-// ─── Renderer ────────────────────────────────────────────────────────────────
-
 const ColumnsRenderer = memo(function ColumnsRenderer({ nodeId, isPreview }: WidgetRendererProps) {
   const node = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
   if (!node) return null;
 
   const p = { ...DEFAULTS, ...(node.props as Partial<ColumnsProps>) };
   const validChildren = node.children.filter(Boolean) as string[];
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   return (
     <div
@@ -84,6 +79,7 @@ const ColumnsRenderer = memo(function ColumnsRenderer({ nodeId, isPreview }: Wid
         background:     p.background || undefined,
         minHeight:      p.minHeight,
         alignItems:     p.verticalAlign,
+        ...visualOverrides,
       }}
     >
       {validChildren.length > 0
@@ -98,8 +94,6 @@ const ColumnsRenderer = memo(function ColumnsRenderer({ nodeId, isPreview }: Wid
   );
 });
 
-// ─── Inspector ────────────────────────────────────────────────────────────────
-
 function ColumnsInspector({ nodeId }: WidgetInspectorProps) {
   const node   = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
   const update = useCanvasStore((s) => s.updateNodeProps);
@@ -109,28 +103,25 @@ function ColumnsInspector({ nodeId }: WidgetInspectorProps) {
 
   return (
     <div className="px-3 pb-3 flex flex-col gap-2.5">
-      <InspectorSection label="Columns" />
+      <InspectorSection label="Layout" />
       <InspectorToggle
-        label="Count"
+        label="Columns"
         value={String(p.columnCount)}
-        options={[
-          { value: '2', label: '2' },
-          { value: '3', label: '3' },
-          { value: '4', label: '4' },
-        ]}
+        options={['2','3','4'].map(v => ({ value: v, label: v }))}
         onChange={(v) => update(nodeId, { columnCount: Number(v) })}
       />
-      <InspectorInput label="Gap"        value={p.gap}       onChange={set('gap')}       placeholder="16px" />
-      <InspectorInput label="Padding"    value={p.padding}   onChange={set('padding')}   placeholder="40px 16px" />
-      <InspectorInput label="Min Height" value={p.minHeight} onChange={set('minHeight')} placeholder="80px" />
+      <InspectorInput label="Gap"        value={p.gap}        onChange={set('gap')}        placeholder="16px" />
+      <InspectorInput label="Padding"    value={p.padding}    onChange={set('padding')}    placeholder="40px 16px" />
+      <InspectorInput label="Min Height" value={p.minHeight}  onChange={set('minHeight')}  placeholder="80px" />
+      <InspectorInput label="Background" value={p.background} onChange={set('background')} placeholder="#fff or rgba(…)" />
       <InspectorToggle
         label="Align"
         value={p.verticalAlign}
         options={[
-          { value: 'stretch',    label: 'Stretch' },
-          { value: 'flex-start', label: 'Top'     },
-          { value: 'center',     label: 'Middle'  },
-          { value: 'flex-end',   label: 'Bottom'  },
+          { value: 'stretch',    label: 'Fill'   },
+          { value: 'flex-start', label: 'Top'    },
+          { value: 'center',     label: 'Middle' },
+          { value: 'flex-end',   label: 'Bottom' },
         ]}
         onChange={set('verticalAlign')}
       />
@@ -138,7 +129,6 @@ function ColumnsInspector({ nodeId }: WidgetInspectorProps) {
   );
 }
 
-// ─── Definition ───────────────────────────────────────────────────────────────
 
 export const ColumnsWidget: WidgetDefinition = {
   type:         'columns',
@@ -146,15 +136,7 @@ export const ColumnsWidget: WidgetDefinition = {
   icon:         Columns2,
   category:     'layout',
   defaultProps: DEFAULTS as unknown as Record<string, unknown>,
-  keywords:     ['row', 'columns', 'grid', 'layout', 'section', '2col', '3col'],
-  createChildNodes: (props): ChildNodeSpec[] => {
-    const count = (props.columnCount as number) ?? 2;
-    return Array.from({ length: count }, (_, i) => ({
-      type:  'container',
-      label: `Column ${i + 1}`,
-      props: { direction: 'column', gap: '0px', padding: '0px', background: '', minHeight: '80px' },
-    }));
-  },
-  Renderer:  ColumnsRenderer,
-  Inspector: ColumnsInspector,
+  keywords:     ['columns', 'grid', 'row', 'layout', 'multi-column'],
+  Renderer:     ColumnsRenderer,
+  Inspector:    ColumnsInspector,
 };

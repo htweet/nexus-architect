@@ -5,7 +5,7 @@
 import { memo, useRef } from 'react';
 import { ImageIcon, Upload, X } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorSelect, InspectorSection, InspectorInput } from './shared';
+import { InspectorSelect, InspectorSection, InspectorInput, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface ImageWidgetProps {
@@ -33,12 +33,13 @@ const ImageWidgetRenderer = memo(function ImageWidgetRenderer({ nodeId }: Widget
   if (!node) return null;
 
   const p = { ...DEFAULTS, ...(node.props as Partial<ImageWidgetProps>) };
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   if (!p.src) {
     return (
       <div
         className="flex flex-col items-center justify-center gap-3 w-full bg-[rgba(255,255,255,0.03)] border-2 border-dashed border-[rgba(255,255,255,0.12)]"
-        style={{ borderRadius: p.borderRadius, minHeight: '160px', maxWidth: p.maxWidth }}
+        style={{ borderRadius: p.borderRadius, minHeight: '160px', maxWidth: p.maxWidth, ...visualOverrides }}
       >
         <ImageIcon size={36} className="text-[#bbcabf] opacity-40" strokeWidth={1.5} />
         <p className="text-xs text-[#bbcabf] opacity-60 font-medium">Upload an image in the inspector</p>
@@ -47,7 +48,7 @@ const ImageWidgetRenderer = memo(function ImageWidgetRenderer({ nodeId }: Widget
   }
 
   return (
-    <figure className="w-full" style={{ maxWidth: p.maxWidth }}>
+    <figure className="w-full" style={{ maxWidth: p.maxWidth, ...visualOverrides }}>
       <img
         src={p.src}
         alt={p.alt}
@@ -87,15 +88,12 @@ function ImageWidgetInspector({ nodeId }: WidgetInspectorProps) {
       }
     };
     reader.readAsDataURL(file);
-    // Reset input so same file can be re-selected
     e.target.value = '';
   };
 
   return (
     <div className="px-3 pb-3 flex flex-col gap-3">
       <InspectorSection label="Source" />
-
-      {/* Upload button */}
       <div className="flex flex-col gap-2">
         <input
           ref={fileRef}
@@ -112,8 +110,6 @@ function ImageWidgetInspector({ nodeId }: WidgetInspectorProps) {
           <Upload size={14} strokeWidth={2} />
           {p.src ? 'Replace image…' : 'Upload image…'}
         </button>
-
-        {/* Preview + clear */}
         {p.src && (
           <div className="relative rounded-md overflow-hidden border border-[rgba(255,255,255,0.10)]" style={{ background: '#09100c' }}>
             <img
@@ -135,10 +131,8 @@ function ImageWidgetInspector({ nodeId }: WidgetInspectorProps) {
           </div>
         )}
       </div>
-
       <InspectorInput label="Alt Text" value={p.alt}     onChange={set('alt')}     placeholder="Describe the image" />
       <InspectorInput label="Caption"  value={p.caption} onChange={set('caption')} placeholder="Optional caption…" />
-
       <InspectorSection label="Appearance" />
       <InspectorSelect
         label="Object Fit"

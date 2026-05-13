@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Space } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { InspectorInput } from './shared';
+import { InspectorInput, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
 export interface SpacerProps { height: string; }
@@ -11,8 +11,9 @@ const SpacerRenderer = memo(function SpacerRenderer({ nodeId, isPreview }: Widge
   const node = useCanvasStore((s) => s.page?.nodeMap[nodeId]);
   if (!node) return null;
   const p = { ...DEFAULTS, ...(node.props as Partial<SpacerProps>) };
+  const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
   return (
-    <div style={{ height: p.height, width: '100%' }} className="relative">
+    <div style={{ height: p.height, width: '100%', ...visualOverrides }} className="relative">
       {!isPreview && (
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100">
           <span className="text-[10px] text-[#9CA3AF] bg-[#F3F4F6] px-2 py-0.5 rounded">{p.height}</span>

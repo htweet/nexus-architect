@@ -11,6 +11,41 @@
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
+/* ─── Layout-only CSS property names (camelCase) ──────────────────────────── */
+// These live on the CanvasNodeWrapper wrapper div (via node.styles).
+// Widget inner elements should NOT re-apply them (would cause double margins etc.)
+const LAYOUT_ONLY_PROPS = new Set([
+  'margin','marginTop','marginRight','marginBottom','marginLeft',
+  'padding','paddingTop','paddingRight','paddingBottom','paddingLeft',
+  'width','height','minWidth','maxWidth','minHeight','maxHeight',
+  'position','top','right','bottom','left','zIndex',
+  'display','float','clear','boxSizing','overflow','overflowX','overflowY',
+  'flexGrow','flexShrink','flexBasis','flex','order','alignSelf','justifySelf',
+  'gridArea','gridColumn','gridRow','gridColumnStart','gridColumnEnd','gridRowStart','gridRowEnd',
+  'flexDirection','flexWrap','alignItems','justifyContent','alignContent',
+  'gap','columnGap','rowGap',
+  'gridTemplateColumns','gridTemplateRows','gridTemplateAreas','gridAutoRows','gridAutoColumns',
+]);
+
+/**
+ * getVisualNodeStyles — extract only "visual" (non-layout) style overrides
+ * from a node's styles.base record.
+ *
+ * Use this inside widget renderers to let the RightPanel Style tab override
+ * widget defaults for typography, background, border, shadow, etc.
+ * Layout properties (margin, padding, width, display …) stay on the wrapper.
+ */
+export function getVisualNodeStyles(
+  styleBase: Record<string, string> | undefined,
+): React.CSSProperties {
+  if (!styleBase) return {};
+  return Object.fromEntries(
+    Object.entries(styleBase).filter(
+      ([k]) => !LAYOUT_ONLY_PROPS.has(k) && !k.startsWith('--'),
+    ),
+  ) as React.CSSProperties;
+}
+
 /* ─── FieldLabel ─────────────────────────────────────────────────────────── */
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
