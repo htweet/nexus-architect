@@ -1,33 +1,11 @@
-/// <reference types="vite/client" />
-
 /**
- * Global type augmentations for the builder app.
- *
- * The window.__NEXUS_CONFIG__ shape is injected by PHP (Loader::render_builder_page).
- * We declare it here so App.tsx can reference it without importing from wp-adapter
- * (which would break the dynamic import code-splitting strategy).
+ * Ambient type stubs for optional observability packages.
+ * These are loaded lazily at runtime — TypeScript only needs the shape.
  */
 
-interface NexusWindowConfig {
-  apiUrl: string;
-  nonce: string;
-  siteUrl: string;
-  version: string;
-  userEmail: string;
-}
-
-declare global {
-  interface Window {
-    __NEXUS_CONFIG__?: NexusWindowConfig;
-  }
-}
-
-export {};
-
-// ─── Optional observability package stubs ────────────────────────────────────
-// These are lazy-loaded at runtime; TypeScript only needs the ambient shape.
-
 declare module '@sentry/browser' {
+  export interface SentryEventHint { originalException?: unknown; }
+  export interface SentryEvent { [key: string]: unknown; }
   export interface SentryScope {
     setTag(key: string, value: string): void;
     setTags(tags: Record<string, string>): void;
@@ -48,6 +26,8 @@ declare module 'posthog-js' {
     identify(id: string, properties?: Record<string, unknown>): void;
     register(properties: Record<string, unknown>): void;
     reset(): void;
+    opt_out_capturing(): void;
+    opt_in_capturing(): void;
   }
   const posthog: PostHog;
   export default posthog;

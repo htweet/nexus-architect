@@ -47,6 +47,7 @@ import { useAutoSave }   from '@/hooks/useAutoSave';
 import { usePresence }   from '@/hooks/usePresence';
 import { SaveErrorToast } from '@/components/ui/SaveErrorToast';
 import { DynamicDataPicker } from '@/components/dynamic-data/DynamicDataPicker';
+import { obs } from '@nexus/core';
 
 // ─── Keyboard Shortcuts ───────────────────────────────────────────────────────
 
@@ -232,12 +233,14 @@ export function Builder() {
       setActiveDragType('palette');
       setActiveDragId(null);
       setActiveDragLabel(def?.label ?? String(data.widgetType));
+      obs.trackWidgetDragged(String(data.widgetType));
     } else {
       setActiveDragType('canvas');
       setActiveDragId(nodeId);
       const node = useCanvasStore.getState().page?.nodeMap[nodeId];
       const def  = node ? getWidget(node.type) : undefined;
       setActiveDragLabel(node?.label ?? def?.label ?? 'Element');
+      obs.trackWidgetDragged(node?.type ?? 'unknown');
     }
   }, []);
 
@@ -264,6 +267,7 @@ export function Builder() {
       const widgetType = activeData.widgetType as string;
       const widgetDef  = getWidget(widgetType);
       if (!widgetDef) return;
+      obs.trackWidgetDropped(widgetType, String(over.id));
 
       let page = useCanvasStore.getState().page;
       if (!page) {

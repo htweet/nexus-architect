@@ -15,6 +15,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RotateCcw, Trash2 } from 'lucide-react';
+import { obs } from '@nexus/core';
 
 // ── Props / State ─────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export class CanvasErrorBoundary extends Component<Props, State> {
   override componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ errorInfo: info });
     console.error('[NexusCanvas] FATAL canvas crash:', error, info.componentStack);
-    // TODO Phase 10: Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
+    obs.trackCanvasErrorBoundary(error);
   }
 
   handleReload = () => {

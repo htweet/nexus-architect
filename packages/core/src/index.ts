@@ -11,3 +11,9 @@ export * from './hooks/index.js';
 
 // Security (Phase 9.2 — schema validation + sanitization)
 export * from './security/validator.js';
+
+// Migration system (Phase 10.3)
+export * from './migration/index.js';
+
+// Observability (Phase 10.4)
+export * from './observability/index.js';

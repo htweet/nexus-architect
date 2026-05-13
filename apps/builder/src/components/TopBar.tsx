@@ -23,6 +23,7 @@ import { SettingsModal } from '@/components/panels/SettingsModal';
 import { PREVIEW_STORAGE_KEY } from '@/lib/preview-constants';
 import { generatePublishPayload, mockPublish } from '@/lib/serialization-engine';
 import type { PublishResult } from '@nexus/core';
+import { obs } from '@nexus/core';
 
 // ── Publish state machine ────────────────────────────────────────────────────
 type PublishPhase = 'idle' | 'compiling' | 'live';
@@ -299,6 +300,9 @@ export function TopBar() {
   const handlePublish = useCallback(async () => {
     if (!page || publishPhase !== 'idle') return;
 
+    const publishStart = Date.now();
+    obs.trackPublishStarted(page.id);
+
     // --- Phase 1: Compiling ---
     setPublishPhase('compiling');
     setPublishProgress(0);
@@ -312,6 +316,7 @@ export function TopBar() {
       // --- Phase 2: Live badge ---
       setPublishPhase('live');
       setPublishProgress(100);
+      obs.trackPublishCompleted(page.id, Date.now() - publishStart);
 
       // Also fire the legacy WP adapter publish so DB record is updated
       try {
@@ -325,7 +330,9 @@ export function TopBar() {
         setPublishPhase('idle');
         setPublishProgress(0);
       }, 3000);
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown publish error';
+      obs.trackPublishFailed(page.id, message);
       setPublishPhase('idle');
       setPublishProgress(0);
     }
@@ -508,6 +515,7 @@ export function TopBar() {
       <PublishDialog
         isOpen={publishOpen && publishResult !== null}
         result={publishResult}
+    
         onClose={() => { setPublishOpen(false); setPublishResult(null); }}
       />
       <TemplatesModal

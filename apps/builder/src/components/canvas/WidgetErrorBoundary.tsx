@@ -17,6 +17,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { obs } from '@nexus/core';
 
 // ── Props / State ─────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ export class WidgetErrorBoundary extends Component<Props, State> {
       error,
       info.componentStack,
     );
-    // TODO Phase 10: Sentry.captureException(error, { extra: { nodeId, nodeType, componentStack: info.componentStack } });
+    obs.trackWidgetErrorBoundary(nodeId, nodeType, error);
   }
 
   handleReset = () => {
