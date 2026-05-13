@@ -18,10 +18,6 @@
  *     via group-hover (pure CSS, no state).
  *   • Toolbar buttons call onPointerDown stopPropagation so they never
  *     accidentally start a drag.
- *
- * Figma-fluid DnD upgrade:
- *   • data-node-id attribute added for SmartGuidesOverlay DOM queries.
- *   • Dragging opacity lowered to 0.2 for a more pronounced "lifted" feel.
  */
 
 import { useCallback, type ReactNode } from 'react';
@@ -104,7 +100,7 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
    * Merge order:
    *   1. User-defined node styles (dimensions, typography, colours …)
    *   2. DnD transform — must always sit on top so dragged elements move correctly
-   *   3. Dragging opacity — 0.2 gives a pronounced "lifted off canvas" feel
+   *   3. Dragging opacity — overrides user opacity while dragging
    */
   const style: React.CSSProperties = {
     ...computedNodeStyles,
@@ -247,15 +243,23 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
         onMouseLeave={handleMouseLeave}
         className={cn(
           'relative group/node',
+          // nexus-canvas-node activates the CSS-only :hover ring in globals.css
+          // — no Zustand state, zero flicker on mouse move
           !isPreview && 'nexus-canvas-node',
+          // ── Selected ring ──
           !isPreview && isSelected && !isEditing && 'nexus-node-selected',
+          // ── Editing ring ──
           !isPreview && isEditing && 'nexus-node-editing',
+          // ── Locked ──
           node.locked && 'pointer-events-none opacity-60',
+          // ── Drag cursor (whole element is the drag target) ──
           !isPreview && !node.locked && !isEditing
             && 'cursor-grab active:cursor-grabbing',
         )}
       >
         {/* ── Drag handle badge (left gutter) ────────────────────────────── */}
+        {/*  Visible always when selected; fades in on hover via CSS.         */}
+        {/*  pointer-events-none so it doesn't intercept hover events.        */}
         {!isPreview && !isEditing && (
           <div
             className={cn(
@@ -296,8 +300,10 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
               'rounded-t-md bg-[#0e1511] border border-[rgba(255,255,255,0.10)]',
             )}
             onClick={(e) => e.stopPropagation()}
+            // Prevent toolbar interactions from starting a drag
             onPointerDown={(e) => e.stopPropagation()}
           >
+            {/* Move up */}
             <button
               onClick={handleMoveUp}
               disabled={!canMoveUp}
@@ -306,6 +312,7 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
             >
               <ChevronUp size={14} />
             </button>
+            {/* Move down */}
             <button
               onClick={handleMoveDown}
               disabled={!canMoveDown}
@@ -317,6 +324,7 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
 
             <div className="h-5 w-px mx-0.5" style={{ background: 'rgba(255,255,255,0.10)' }} />
 
+            {/* Lock */}
             <button
               onClick={handleToggleLock}
               className={cn(
@@ -329,6 +337,7 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
             >
               {node.locked ? <Lock size={13} /> : <Unlock size={13} />}
             </button>
+            {/* Hide */}
             <button
               onClick={handleToggleHidden}
               className={cn(
@@ -344,6 +353,7 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
 
             <div className="h-5 w-px mx-0.5" style={{ background: 'rgba(255,255,255,0.10)' }} />
 
+            {/* Duplicate */}
             <button
               onClick={handleDuplicate}
               className="flex h-6 w-7 items-center justify-center rounded text-[#bbcabf] hover:text-[#dde4dd] hover:bg-[rgba(255,255,255,0.05)] transition-colors duration-150"
@@ -351,6 +361,7 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
             >
               <Copy size={14} />
             </button>
+            {/* Delete */}
             <button
               onClick={handleDelete}
               className="flex h-6 w-7 items-center justify-center rounded text-[#bbcabf] hover:text-[#ffb4ab] hover:bg-error/10 transition-colors duration-150"
@@ -367,4 +378,6 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
     </NodeContextMenu>
   );
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+    </NodeContextMenu>
+  );
+}
