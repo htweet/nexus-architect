@@ -6,6 +6,11 @@ import './styles/globals.css';
 // Register all widgets with the global registry before the app renders.
 import './widgets/index';
 
+// Wire the addon loader into the core store so installAddon() uses real bundles.
+import { setAddonLoader } from '@nexus/core';
+import { loadAddon, unloadAddon } from '@/lib/addon-loader';
+setAddonLoader({ loadAddon, unloadAddon });
+
 // ── Dev tool: expose stores on window for E2E testing / browser console ──────
 // Only active when Vite sets MODE to development (stripped in production builds).
 if (import.meta.env.DEV) {

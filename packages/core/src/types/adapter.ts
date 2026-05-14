@@ -132,9 +132,3 @@ export interface TemplateAdapter {
 
 /** Full adapter with optional template support */
 export type DataAdapterWithTemplates = DataAdapter & Partial<TemplateAdapter>;
-
-/**
- * Canonical alias for the core data adapter interface.
- * Builder code should use this name; DataAdapter is the underlying type.
- */
-export type NexusDataAdapter = DataAdapterWithTemplates;

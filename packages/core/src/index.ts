@@ -17,3 +17,6 @@ export * from './migration/index.js';
 
 // Observability (Phase 10.4)
 export * from './observability/index.js';
+
+// ─── Plugin API (addon authoring contract) ───────────────────────────────────
+export * from './plugin-api/index.js';

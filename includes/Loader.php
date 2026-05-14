@@ -42,6 +42,9 @@ final class Loader {
         // Admin script enqueue — builder page only.
         add_action('admin_enqueue_scripts', [$this->enqueue, 'enqueue_builder']);
 
+        // VAE Gap G: PWA root file serving (manifest.json, sw.js via rewrite rules).
+        add_action('init', [$this->enqueue, 'register_pwa_hooks']);
+
         // Builder admin menu.
         add_action('admin_menu', [$this, 'add_admin_menu']);
 

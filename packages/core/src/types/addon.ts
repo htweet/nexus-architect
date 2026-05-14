@@ -30,6 +30,17 @@ export interface AddonManifest {
   isActive: boolean;
   /** Remote download endpoint. Null for built-in addons. */
   downloadUrl?: string;
+  /**
+   * URL of the addon's ESM JS bundle.
+   * Fetched and dynamically imported when the user clicks Install/Activate.
+   * Null for built-in / mock addons that register themselves at boot.
+   */
+  entryPoint?: string;
+  /**
+   * If true, a valid licenseKey is required before installation is allowed.
+   * Automatically set to true when price > 0.
+   */
+  licenseRequired?: boolean;
   /** 0 = free */
   price: number;
   rating?: number;

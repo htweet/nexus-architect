@@ -1,29 +1,35 @@
 /**
  * LeftPanel — Nexus Architect left sidebar.
- * Width: 264px. Tabs: Layers | Widgets | AI
+ * Width: 264px. Tabs: Layers | Widgets | AI | Marketplace
+ *
+ * Phase M: Added Marketplace tab + useWidgetRegistryVersion for reactive
+ * palette — when an addon registers/unregisters widgets the palette
+ * re-renders automatically without any extra store plumbing.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import {
   Search, ChevronRight, ChevronDown,
   FileText, Plus, AlignLeft,
   Square, Minus as MinusIcon, Image, Type, MousePointer2,
   LayoutGrid, Columns, Frame, List, Loader2, Heading1,
-  Star, Zap, Component, Sparkles, LogIn,
+  Star, Zap, Component, Sparkles, LogIn, Store,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
   useCanvasStore, useSelectionStore, useUIStore, type NexusPage,
 } from '@nexus/core';
 import { useAdapter } from '@/contexts/AdapterContext';
-import { getWidget } from '@/widgets/registry';
+import { getWidget, getAllWidgets } from '@/widgets/registry';
 import { AiPanel } from '@/components/panels/AiPanel';
 import { LayersTree } from '@/components/layers/LayersTree';
+import { MarketplacePanel } from '@/components/panels/MarketplacePanel';
+import { useWidgetRegistryVersion } from '@/hooks/useWidgetRegistryVersion';
 
-type PanelTab = 'layers' | 'widgets' | 'ai';
+type PanelTab = 'layers' | 'widgets' | 'ai' | 'marketplace';
 
-const PALETTE_GROUPS = [
+const STATIC_PALETTE_GROUPS = [
   {
     label: 'Layout',
     items: [
@@ -64,6 +70,33 @@ const PALETTE_GROUPS = [
     ],
   },
 ];
+
+/** Build the full palette groups, merging in any dynamically-registered addon widgets. */
+function buildPaletteGroups(registryVersion: number) {
+  // registryVersion is consumed so useMemo re-runs when the registry changes
+  void registryVersion;
+
+  const allWidgets = getAllWidgets();
+  const staticTypes = new Set(
+    STATIC_PALETTE_GROUPS.flatMap((g) => g.items.map((i) => i.type)),
+  );
+
+  // Collect addon-registered widgets not already in the static palette
+  const addonItems = allWidgets
+    .filter((w) => !staticTypes.has(w.type))
+    .map((w) => ({
+      type:  w.type,
+      label: w.label ?? w.type,
+      icon:  w.icon ? <w.icon size={14} strokeWidth={1.5} /> : <Sparkles size={14} strokeWidth={1.5} />,
+    }));
+
+  if (addonItems.length === 0) return STATIC_PALETTE_GROUPS;
+
+  return [
+    ...STATIC_PALETTE_GROUPS,
+    { label: 'Addons', items: addonItems },
+  ];
+}
 
 function PaletteItem({ type, label, icon }: { type: string; label: string; icon: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -218,16 +251,27 @@ export function LeftPanel() {
   const page           = useCanvasStore((s) => s.page);
   const [search, setSearch] = useState('');
 
+  // Reactive: re-builds palette groups when addons register / unregister widgets
+  const registryVersion = useWidgetRegistryVersion();
+  const paletteGroups   = useMemo(
+    () => buildPaletteGroups(registryVersion),
+    [registryVersion],
+  );
+
   if (!leftPanelOpen) return null;
 
-  const tab = (activeLeftTab === 'layers' || activeLeftTab === 'widgets' || activeLeftTab === 'ai')
-    ? activeLeftTab
-    : 'layers';
+  const tab: PanelTab =
+    activeLeftTab === 'layers'      ? 'layers'      :
+    activeLeftTab === 'widgets'     ? 'widgets'     :
+    activeLeftTab === 'ai'          ? 'ai'          :
+    activeLeftTab === 'marketplace' ? 'marketplace' :
+    'layers';
 
-  const TABS: { id: PanelTab; label: string }[] = [
-    { id: 'layers',  label: 'Layers'  },
-    { id: 'widgets', label: 'Widgets' },
-    { id: 'ai',      label: 'AI'      },
+  const TABS: { id: PanelTab; label: string; icon?: React.ReactNode }[] = [
+    { id: 'layers',      label: 'Layers'  },
+    { id: 'widgets',     label: 'Widgets' },
+    { id: 'ai',          label: 'AI'      },
+    { id: 'marketplace', label: 'Store', icon: <Store size={11} strokeWidth={1.5} /> },
   ];
 
   return (
@@ -241,7 +285,7 @@ export function LeftPanel() {
           <button
             key={t.id}
             onClick={() => setLeftTab(t.id as Parameters<typeof setLeftTab>[0])}
-            className="flex-1 h-10 text-[13px] font-medium transition-colors duration-[120ms]"
+            className="flex-1 h-10 text-[12px] font-medium transition-colors duration-[120ms]"
             style={{
               color:        tab === t.id ? '#50dea3' : '#bbcabf',
               borderBottom: tab === t.id ? '2px solid #10b77f' : '2px solid transparent',
@@ -250,7 +294,9 @@ export function LeftPanel() {
             onMouseEnter={(e) => { if (tab !== t.id) (e.currentTarget as HTMLElement).style.color = '#dde4dd'; }}
             onMouseLeave={(e) => { if (tab !== t.id) (e.currentTarget as HTMLElement).style.color = '#bbcabf'; }}
           >
-            {t.label}
+            {t.icon
+              ? <span className="flex items-center justify-center gap-1">{t.icon}{t.label}</span>
+              : t.label}
           </button>
         ))}
       </div>
@@ -262,8 +308,15 @@ export function LeftPanel() {
         </div>
       )}
 
-      {/* Search bar (Layers + Widgets) */}
-      {tab !== 'ai' && (
+      {/* Marketplace tab */}
+      {tab === 'marketplace' && (
+        <div className="flex-1 overflow-hidden" data-testid="marketplace-tab-content">
+          <MarketplacePanel />
+        </div>
+      )}
+
+      {/* Search bar (Layers + Widgets only) */}
+      {(tab === 'layers' || tab === 'widgets') && (
         <div className="px-2.5 py-2 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div className="flex items-center gap-2 rounded-md px-2.5 py-1.5" style={{ background: 'rgba(255,255,255,0.05)' }}>
             <Search size={13} style={{ color: '#bbcabf', flexShrink: 0 }} />
@@ -299,7 +352,7 @@ export function LeftPanel() {
       {/* Widgets tab */}
       {tab === 'widgets' && (
         <div className="flex-1 overflow-y-auto custom-scrollbar py-2">
-          {PALETTE_GROUPS.map((group) => (
+          {paletteGroups.map((group) => (
             <div key={group.label} className="mb-3">
               <div className="px-3.5 py-1.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#bbcabf' }}>

@@ -79,4 +79,4 @@ bridgeNexusWidget(NexusAuthWidgetDef);
 
 // Re-export for external use
 export { registerWidget, getWidget, getAllWidgets, getWidgetsByCategory } from './registry';
-export type { WidgetDefinition, WidgetCategory, WidgetRendererProps, WidgetInspectorProps, ChildNodeSpec } from './registry';
+export type { WidgetDefinition, WidgetCategory, WidgetRendererProps, WidgetInspectorProps, ChildNodeSpec } from 

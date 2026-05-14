@@ -75,6 +75,11 @@ export function registerWidget(def: WidgetDefinition): void {
   _registry.set(def.type, def);
 }
 
+/** Dynamically remove a widget (called by addon-loader on uninstall). */
+export function unregisterWidget(type: string): void {
+  _registry.delete(type);
+}
+
 export function getWidget(type: string): WidgetDefinition | undefined {
   return _registry.get(type);
 }

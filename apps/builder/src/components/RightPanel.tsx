@@ -20,7 +20,7 @@ import * as ScrollArea from '@radix-ui/react-scroll-area';
 import * as Accordion  from '@radix-ui/react-accordion';
 import {
   Settings2, Palette, Layout, ChevronDown, Gauge,
-  Lock, Eye, AlignLeft, AlignCenter, AlignRight, AlignJustify,
+  Lock, Unlock, Eye, AlignLeft, AlignCenter, AlignRight, AlignJustify,
   AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   Monitor, Tablet, Smartphone,
   History, Type, Square, Layers, Sparkles,
@@ -33,11 +33,12 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { useUIStore, useSelectionStore, useCanvasStore } from '@nexus/core';
+import { useUIStore, useSelectionStore, useCanvasStore, useDataBindStore } from '@nexus/core';
 import { getWidget } from '@/widgets/registry';
 import { getNexusWidget } from '@nexus/core';
 import { SchemaContentTab } from '@/components/sidebar/SchemaRenderer';
 import { GlobalStylesPanel }    from '@/components/panels/GlobalStylesPanel';
+import { ActionsPipelineEditor } from '@/components/panels/ActionsPipelineEditor';
 import { PageSettingsPanel }    from '@/components/panels/PageSettingsPanel';
 import { RevisionHistoryPanel } from '@/components/panels/RevisionHistoryPanel';
 import { PerformancePanel }     from '@/components/panels/PerformancePanel';
@@ -81,6 +82,120 @@ function CInput({
         onFocus={(e) => (e.currentTarget.style.borderColor = '#10b77f')}
         onBlur={(e)  => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)')}
       />
+    </div>
+  );
+}
+
+/** Parses a CSS value like "16px", "1.5em", "auto" into {num, unit} */
+function parseCSSVal(raw: string, defaultUnit = 'px'): { num: string; unit: string } {
+  const v = (raw ?? '').trim();
+  if (!v) return { num: '', unit: defaultUnit };
+  if (/^(auto|none|inherit|initial|unset|normal)$/.test(v)) return { num: '', unit: v };
+  if (v === '0') return { num: '0', unit: defaultUnit };
+  const m = v.match(/^(-?[\d.]+)(px|%|rem|em|vw|vh|fr|deg|rad|turn)?$/);
+  if (m) return { num: m[1] ?? '', unit: m[2] || defaultUnit };
+  return { num: v, unit: defaultUnit };
+}
+
+/**
+ * CNumericInput — stepper number field with unit selector.
+ * Replaces raw <input type="text"> for all numeric CSS properties.
+ * Scroll-wheel adjusts value; unit dropdown auto-detects from existing value.
+ * Exempt: free-form CSS (gridTemplateColumns, flexBasis, etc.) stays as CInput.
+ */
+function CNumericInput({
+  label, value, onChange, placeholder = '0', className,
+  units = ['px', '%', 'rem', 'em'],
+  allowAuto = false, step = 1, min, max,
+}: {
+  label?: string; value: string; onChange: (v: string) => void;
+  placeholder?: string; className?: string;
+  units?: string[]; allowAuto?: boolean;
+  step?: number; min?: number; max?: number;
+}) {
+  const allUnits = allowAuto ? [...units, 'auto'] : units;
+  const { num, unit: pUnit } = parseCSSVal(value, units[0] ?? 'px');
+  const activeUnit = allUnits.includes(pUnit) ? pUnit : (allUnits[0] ?? 'px');
+  const isKeyword  = activeUnit === 'auto' || activeUnit === 'none' || activeUnit === 'inherit';
+
+  const emit = (n: string, u: string) => {
+    if (u === 'auto' || u === 'none' || u === 'inherit') { onChange(u); return; }
+    if (!n && n !== '0') { onChange(''); return; }
+    onChange(`${n}${u}`);
+  };
+
+  return (
+    <div className={cn('flex items-center gap-1 min-w-0', className)}>
+      {label && (
+        <span className="text-[10px] shrink-0 select-none leading-none" style={{ color: '#7a8f7e', minWidth: 14 }}>
+          {label}
+        </span>
+      )}
+      <div
+        className="flex flex-1 min-w-0 rounded overflow-hidden"
+        style={{ height: 26, border: '1px solid rgba(255,255,255,0.09)', transition: 'border-color 120ms' }}
+        onFocusCapture={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#10b77f'; }}
+        onBlurCapture={(e)  => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.09)'; }}
+      >
+        <input
+          type="number"
+          value={isKeyword ? '' : (num ?? '')}
+          disabled={isKeyword}
+          step={step}
+          {...(min !== undefined ? { min } : {})}
+          {...(max !== undefined ? { max } : {})}
+          onChange={(e) => emit(e.target.value, activeUnit)}
+          onWheel={(e) => {
+            if (isKeyword) return;
+            e.preventDefault();
+            const curr  = parseFloat(num || '0') || 0;
+            const delta = e.deltaY < 0 ? step : -step;
+            const next  = parseFloat((curr + delta).toFixed(3));
+            if (min !== undefined && next < min) return;
+            if (max !== undefined && next > max) return;
+            emit(String(next), activeUnit);
+          }}
+          placeholder={isKeyword ? activeUnit : placeholder}
+          className="flex-1 min-w-0 text-center text-[12px] bg-transparent outline-none"
+          style={{
+            color:   isKeyword ? '#5a7060' : '#dde4dd',
+            padding: '0 2px',
+            MozAppearance: 'textfield',
+          } as React.CSSProperties}
+        />
+        {allUnits.length > 1 ? (
+          <div
+            className="relative shrink-0 flex items-center border-l"
+            style={{ borderColor: 'rgba(255,255,255,0.09)', background: 'rgba(0,0,0,0.25)',
+                     width: activeUnit.length > 3 ? 46 : activeUnit.length > 2 ? 40 : 34 }}
+          >
+            <select
+              value={activeUnit}
+              onChange={(e) => emit(num, e.target.value)}
+              className="w-full outline-none cursor-pointer text-[10px] bg-transparent"
+              style={{
+                color: '#7a8f7e',
+                padding: '0 14px 0 4px',
+                WebkitAppearance: 'none',
+                appearance: 'none',
+              } as React.CSSProperties}
+            >
+              {allUnits.map((u) => (
+                <option key={u} value={u} style={{ background: '#0e1511', color: '#dde4dd' }}>{u}</option>
+              ))}
+            </select>
+            <span className="absolute right-1 top-1/2 pointer-events-none select-none leading-none"
+              style={{ color: '#5a7060', fontSize: 8, transform: 'translateY(-50%)' }}>▾</span>
+          </div>
+        ) : (
+          <span
+            className="shrink-0 flex items-center border-l text-[10px] px-1"
+            style={{ borderColor: 'rgba(255,255,255,0.09)', color: '#5a7060', background: 'rgba(0,0,0,0.25)' }}
+          >
+            {allUnits[0] ?? 'px'}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -398,9 +513,9 @@ function LayoutControls({ nodeId }: { nodeId: string }) {
             )}
           </div>
           <div className="grid grid-cols-3 gap-1.5">
-            <CInput label="Gap"  value={get('gap')}       onChange={set('gap')}       placeholder="0" />
-            <CInput label="ColG" value={get('columnGap')} onChange={set('columnGap')} placeholder="0" />
-            <CInput label="RowG" value={get('rowGap')}    onChange={set('rowGap')}    placeholder="0" />
+            <CNumericInput label="Gap"  value={get('gap')}       onChange={set('gap')}       placeholder="0" units={['px','%','rem','em']} />
+            <CNumericInput label="ColG" value={get('columnGap')} onChange={set('columnGap')} placeholder="0" units={['px','%','rem','em']} />
+            <CNumericInput label="RowG" value={get('rowGap')}    onChange={set('rowGap')}    placeholder="0" units={['px','%','rem','em']} />
           </div>
         </>
       )}
@@ -412,9 +527,9 @@ function LayoutControls({ nodeId }: { nodeId: string }) {
           <CInput label="Rows"   value={get('gridTemplateRows')}    onChange={set('gridTemplateRows')}    placeholder="auto"            />
           <CInput label="Areas"  value={get('gridTemplateAreas')}   onChange={set('gridTemplateAreas')}   placeholder='"a b" "c d"'    />
           <div className="grid grid-cols-3 gap-1.5">
-            <CInput label="Gap"  value={get('gap')}       onChange={set('gap')}       placeholder="0" />
-            <CInput label="ColG" value={get('columnGap')} onChange={set('columnGap')} placeholder="0" />
-            <CInput label="RowG" value={get('rowGap')}    onChange={set('rowGap')}    placeholder="0" />
+            <CNumericInput label="Gap"  value={get('gap')}       onChange={set('gap')}       placeholder="0" units={['px','%','rem','em']} />
+            <CNumericInput label="ColG" value={get('columnGap')} onChange={set('columnGap')} placeholder="0" units={['px','%','rem','em']} />
+            <CNumericInput label="RowG" value={get('rowGap')}    onChange={set('rowGap')}    placeholder="0" units={['px','%','rem','em']} />
           </div>
           <div className="flex items-center gap-1">
             <span className="text-[10px] select-none shrink-0 w-8" style={{ color: '#7a8f7e' }}>Align</span>
@@ -436,51 +551,112 @@ function LayoutControls({ nodeId }: { nodeId: string }) {
 
 // ─── 2. SPACING ───────────────────────────────────────────────────────────────
 
+// ─── BoxModel — top-level (NOT nested) so React never remounts on store updates ──
+// Nested functions inside a component = new identity every render = unmount + focus loss.
+function BoxModel({
+  label, topK, rightK, bottomK, leftK, accent,
+  set, get,
+}: {
+  label: string;
+  topK: string; rightK: string; bottomK: string; leftK: string;
+  accent: string;
+  set: (key: string) => (v: string) => void;
+  get: (key: string) => string;
+}) {
+  const [locked, setLocked] = useState(false);
+  const spaceUnits = ['px', '%', 'rem', 'em'];
+  const allowAuto  = label === 'Margin';
+
+  const top    = get(topK);
+  const right  = get(rightK);
+  const bottom = get(bottomK);
+  const left   = get(leftK);
+
+  // Derive unified value: show it only when all 4 sides agree
+  const allSame  = top === right && right === bottom && bottom === left;
+  const allValue = allSame ? (top || '') : '';
+
+  // Writing to "all" propagates to all 4 individual sides
+  const handleAll = useCallback((v: string) => {
+    set(topK)(v);
+    set(rightK)(v);
+    set(bottomK)(v);
+    set(leftK)(v);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topK, rightK, bottomK, leftK]);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {/* Header row: label + lock toggle */}
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: accent }}>{label}</span>
+        <button
+          onClick={() => setLocked((l) => !l)}
+          title={locked ? 'Unlink — edit sides individually' : 'Link — set all sides at once'}
+          className="flex items-center justify-center w-5 h-5 rounded transition-colors duration-[100ms]"
+          style={{ background: locked ? 'rgba(16,183,127,0.13)' : 'rgba(255,255,255,0.05)', color: locked ? '#10b77f' : '#5a7060' }}
+        >
+          {locked
+            ? <Lock   size={9} strokeWidth={2.5} />
+            : <Unlock size={9} strokeWidth={2.5} />}
+        </button>
+      </div>
+
+      {locked ? (
+        /* ── Linked (locked) mode: read-only display — unlock to edit individual sides ── */
+        <div
+          className="flex items-center rounded overflow-hidden select-none"
+          style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.07)', height: 28 }}
+          title="Unlock to edit sides individually"
+        >
+          <span
+            className="flex-1 text-center text-[11px]"
+            style={{ color: allSame && allValue ? '#9ab09e' : '#4a5f4e', paddingLeft: 8 }}
+          >
+            {allSame && allValue ? allValue : '—'}
+          </span>
+          <span
+            className="shrink-0 flex items-center justify-center"
+            style={{ width: 28, color: '#2e4535' }}
+          >
+            <Lock size={9} strokeWidth={2} />
+          </span>
+        </div>
+      ) : (
+        /* ── Unlinked mode: box-model grid with 4 individual steppers ── */
+        <div className="grid gap-1" style={{ gridTemplateColumns: '1fr 2fr 1fr', gridTemplateRows: 'repeat(3, auto)' }}>
+          <div />
+          <CNumericInput value={top}    onChange={set(topK)}    placeholder="0" units={spaceUnits} allowAuto={allowAuto} />
+          <div />
+          <CNumericInput value={left}   onChange={set(leftK)}   placeholder="0" units={spaceUnits} allowAuto={allowAuto} />
+          <div className="flex items-center justify-center rounded text-[9px]"
+            style={{ background: `${accent}18`, border: `1px solid ${accent}30`, color: accent, height: 26 }}>
+            {label[0]}
+          </div>
+          <CNumericInput value={right}  onChange={set(rightK)}  placeholder="0" units={spaceUnits} allowAuto={allowAuto} />
+          <div />
+          <CNumericInput value={bottom} onChange={set(bottomK)} placeholder="0" units={spaceUnits} allowAuto={allowAuto} />
+          <div />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SpacingControls({ nodeId }: { nodeId: string }) {
   const { node, set, get } = useNS(nodeId);
   if (!node) return null;
-
-  function BoxModel({
-    label, topK, rightK, bottomK, leftK, allK, accent,
-  }: {
-    label: string;
-    topK: string; rightK: string; bottomK: string; leftK: string; allK: string;
-    accent: string;
-  }) {
-    return (
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: accent }}>{label}</span>
-          <CInput value={get(allK)} onChange={set(allK)} placeholder="all" className="w-16" />
-        </div>
-        <div className="grid gap-1" style={{ gridTemplateColumns: '1fr 2fr 1fr', gridTemplateRows: '1fr 1fr 1fr' }}>
-          <div />
-          <CInput value={get(topK)} onChange={set(topK)} placeholder="0" />
-          <div />
-          <CInput value={get(leftK)}   onChange={set(leftK)}   placeholder="0" />
-          <div className="flex items-center justify-center rounded text-[9px]"
-            style={{ background: `${accent}18`, border: `1px solid ${accent}30`, color: accent, height: 26 }}>
-            {label.substring(0, 1).toUpperCase()}
-          </div>
-          <CInput value={get(rightK)}  onChange={set(rightK)}  placeholder="0" />
-          <div />
-          <CInput value={get(bottomK)} onChange={set(bottomK)} placeholder="0" />
-          <div />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="px-3 pb-3 flex flex-col gap-2.5">
       <SLabel>Dimensions</SLabel>
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="W"   value={get('width')}     onChange={set('width')}     placeholder="auto" />
-        <CInput label="H"   value={get('height')}    onChange={set('height')}    placeholder="auto" />
-        <CInput label="min" value={get('minWidth')}  onChange={set('minWidth')}  placeholder="0"    />
-        <CInput label="max" value={get('maxWidth')}  onChange={set('maxWidth')}  placeholder="100%" />
-        <CInput label="mnH" value={get('minHeight')} onChange={set('minHeight')} placeholder="0"    />
-        <CInput label="mxH" value={get('maxHeight')} onChange={set('maxHeight')} placeholder="none" />
+        <CNumericInput label="W"   value={get('width')}     onChange={set('width')}     placeholder="auto" units={['px','%','rem','em','vw','vh']} allowAuto />
+        <CNumericInput label="H"   value={get('height')}    onChange={set('height')}    placeholder="auto" units={['px','%','rem','em','vw','vh']} allowAuto />
+        <CNumericInput label="min" value={get('minWidth')}  onChange={set('minWidth')}  placeholder="0"    units={['px','%','rem','em','vw','vh']} allowAuto />
+        <CNumericInput label="max" value={get('maxWidth')}  onChange={set('maxWidth')}  placeholder="100%" units={['px','%','rem','em','vw','vh']} allowAuto />
+        <CNumericInput label="mnH" value={get('minHeight')} onChange={set('minHeight')} placeholder="0"    units={['px','%','rem','em','vw','vh']} allowAuto />
+        <CNumericInput label="mxH" value={get('maxHeight')} onChange={set('maxHeight')} placeholder="none" units={['px','%','rem','em','vw','vh']} allowAuto />
       </div>
       <div className="flex items-center gap-2">
         <CSelect label="Box"
@@ -490,8 +666,8 @@ function SpacingControls({ nodeId }: { nodeId: string }) {
         />
       </div>
       <Divider />
-      <BoxModel label="Margin"  topK="marginTop"  rightK="marginRight"  bottomK="marginBottom"  leftK="marginLeft"  allK="margin"  accent="#7a8f7e" />
-      <BoxModel label="Padding" topK="paddingTop" rightK="paddingRight" bottomK="paddingBottom" leftK="paddingLeft" allK="padding" accent="#10b77f" />
+      <BoxModel label="Margin"  topK="marginTop"  rightK="marginRight"  bottomK="marginBottom"  leftK="marginLeft"  accent="#10b77f" set={set} get={get} />
+      <BoxModel label="Padding" topK="paddingTop" rightK="paddingRight" bottomK="paddingBottom" leftK="paddingLeft" accent="#10b77f" set={set} get={get} />
     </div>
   );
 }
@@ -518,12 +694,12 @@ function PositionControls({ nodeId }: { nodeId: string }) {
       {pos !== 'static' && (
         <>
           <div className="grid grid-cols-2 gap-1.5">
-            <CInput label="↑T" value={get('top')}    onChange={set('top')}    placeholder="auto" />
-            <CInput label="→R" value={get('right')}  onChange={set('right')}  placeholder="auto" />
-            <CInput label="↓B" value={get('bottom')} onChange={set('bottom')} placeholder="auto" />
-            <CInput label="←L" value={get('left')}   onChange={set('left')}   placeholder="auto" />
+            <CNumericInput label="↑T" value={get('top')}    onChange={set('top')}    placeholder="auto" units={['px','%','rem','em']} allowAuto />
+            <CNumericInput label="→R" value={get('right')}  onChange={set('right')}  placeholder="auto" units={['px','%','rem','em']} allowAuto />
+            <CNumericInput label="↓B" value={get('bottom')} onChange={set('bottom')} placeholder="auto" units={['px','%','rem','em']} allowAuto />
+            <CNumericInput label="←L" value={get('left')}   onChange={set('left')}   placeholder="auto" units={['px','%','rem','em']} allowAuto />
           </div>
-          <CInput label="Z" value={get('zIndex')} onChange={set('zIndex')} placeholder="auto" />
+          <CInput label="Z" value={get('zIndex')} onChange={set('zIndex')} placeholder="auto" type="number" />
         </>
       )}
       <Divider />
@@ -641,8 +817,8 @@ function BackgroundControls({ nodeId }: { nodeId: string }) {
 
       <Divider />
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="⌐R"  value={get('borderRadius')} onChange={set('borderRadius')} placeholder="0px" />
-        <CInput label="Op"  value={get('opacity')}      onChange={set('opacity')}      placeholder="1"   />
+        <CNumericInput label="⌐R" value={get('borderRadius')} onChange={set('borderRadius')} placeholder="0" units={['px','%']} />
+        <CNumericInput label="Op" value={get('opacity')}      onChange={set('opacity')}      placeholder="1" units={['']} step={0.01} min={0} max={1} />
       </div>
     </div>
   );
@@ -695,13 +871,13 @@ function TypographyControls({ nodeId }: { nodeId: string }) {
       <CSelect value={get('fontFamily') || 'inherit'} options={FONTS} onChange={set('fontFamily')} />
       <div className="grid grid-cols-2 gap-1.5">
         <CSelect value={fontWt} options={WEIGHTS} onChange={set('fontWeight')} />
-        <CInput label="px" value={get('fontSize')} onChange={set('fontSize')} placeholder="16" />
+        <CNumericInput label="sz" value={get('fontSize')} onChange={set('fontSize')} placeholder="16" units={['px','rem','em']} />
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="↕"  value={get('lineHeight')}    onChange={set('lineHeight')}    placeholder="1.5" />
-        <CInput label="LS" value={get('letterSpacing')} onChange={set('letterSpacing')} placeholder="0em" />
+        <CNumericInput label="↕"  value={get('lineHeight')}    onChange={set('lineHeight')}    placeholder="1.5" units={['','px','em','rem']} step={0.1} />
+        <CNumericInput label="LS" value={get('letterSpacing')} onChange={set('letterSpacing')} placeholder="0"   units={['em','px','rem']} step={0.01} />
       </div>
-      <CInput label="WS" value={get('wordSpacing')} onChange={set('wordSpacing')} placeholder="normal" />
+      <CNumericInput label="WS" value={get('wordSpacing')} onChange={set('wordSpacing')} placeholder="0" units={['em','px','rem']} step={0.1} />
 
       {/* Style icon buttons (italic / underline / strike) */}
       <div className="flex items-center gap-1">
@@ -753,10 +929,10 @@ function TypographyControls({ nodeId }: { nodeId: string }) {
         options={[{value:'normal',label:'Normal'},{value:'nowrap',label:'No Wrap'},{value:'pre',label:'Pre'},{value:'pre-wrap',label:'Pre Wrap'},{value:'break-spaces',label:'Break Spaces'}]}
         onChange={set('whiteSpace')}
       />
-      <CInput label="Line Clamp" value={get('-webkit-line-clamp') || ''} onChange={(v) => {
+      <CNumericInput label="Line Clamp" value={get('-webkit-line-clamp') || ''} onChange={(v) => {
         set('-webkit-line-clamp')(v);
         if (v) { set('-webkit-box-orient')('vertical'); set('overflow')('hidden'); set('display')('-webkit-box'); }
-      }} placeholder="3 (truncate after N lines)" />
+      }} placeholder="3" units={['']} step={1} min={1} />
       <CSelect label="Variant"
         value={get('fontVariant') || 'normal'}
         options={[{value:'normal',label:'Normal'},{value:'small-caps',label:'Small Caps'}]}
@@ -798,11 +974,11 @@ function BorderControls({ nodeId }: { nodeId: string }) {
         <>
           <div className="grid grid-cols-2 gap-1.5">
             <CColor label="Col" value={get('borderColor')} onChange={set('borderColor')} />
-            <CInput label="W"   value={get('borderWidth')} onChange={set('borderWidth')} placeholder="0px" />
+            <CNumericInput label="W" value={get('borderWidth')} onChange={set('borderWidth')} placeholder="0" units={['px']} />
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <CSelect value={get('borderStyle') || 'solid'} options={BORDER_STYLES} onChange={set('borderStyle')} />
-            <CInput label="⌐R" value={get('borderRadius')} onChange={set('borderRadius')} placeholder="0px" />
+            <CNumericInput label="⌐R" value={get('borderRadius')} onChange={set('borderRadius')} placeholder="0" units={['px','%']} />
           </div>
         </>
       ) : (
@@ -811,7 +987,7 @@ function BorderControls({ nodeId }: { nodeId: string }) {
             <div key={side} className="flex flex-col gap-1">
               <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#5a7060' }}>{side}</span>
               <div className="grid grid-cols-3 gap-1">
-                <CInput label="W" value={get(`border${side}Width`)} onChange={set(`border${side}Width`)} placeholder="0px" />
+                <CNumericInput label="W" value={get(`border${side}Width`)} onChange={set(`border${side}Width`)} placeholder="0" units={['px']} />
                 <CSelect value={get(`border${side}Style`) || 'solid'} options={BORDER_STYLES} onChange={set(`border${side}Style`)} />
                 <CColor  value={get(`border${side}Color`)} onChange={set(`border${side}Color`)} />
               </div>
@@ -822,21 +998,21 @@ function BorderControls({ nodeId }: { nodeId: string }) {
 
       <SLabel>Corner Radius</SLabel>
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="↖" value={get('borderTopLeftRadius')}     onChange={set('borderTopLeftRadius')}     placeholder="0" />
-        <CInput label="↗" value={get('borderTopRightRadius')}    onChange={set('borderTopRightRadius')}    placeholder="0" />
-        <CInput label="↙" value={get('borderBottomLeftRadius')}  onChange={set('borderBottomLeftRadius')}  placeholder="0" />
-        <CInput label="↘" value={get('borderBottomRightRadius')} onChange={set('borderBottomRightRadius')} placeholder="0" />
+        <CNumericInput label="↖" value={get('borderTopLeftRadius')}     onChange={set('borderTopLeftRadius')}     placeholder="0" units={['px','%']} />
+        <CNumericInput label="↗" value={get('borderTopRightRadius')}    onChange={set('borderTopRightRadius')}    placeholder="0" units={['px','%']} />
+        <CNumericInput label="↙" value={get('borderBottomLeftRadius')}  onChange={set('borderBottomLeftRadius')}  placeholder="0" units={['px','%']} />
+        <CNumericInput label="↘" value={get('borderBottomRightRadius')} onChange={set('borderBottomRightRadius')} placeholder="0" units={['px','%']} />
       </div>
 
       <Divider />
       <SLabel>Outline</SLabel>
       <div className="grid grid-cols-2 gap-1.5">
         <CColor label="Col" value={get('outlineColor')} onChange={set('outlineColor')} />
-        <CInput label="W"   value={get('outlineWidth')} onChange={set('outlineWidth')} placeholder="2px" />
+        <CNumericInput label="W" value={get('outlineWidth')} onChange={set('outlineWidth')} placeholder="2" units={['px']} />
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <CSelect value={get('outlineStyle') || 'solid'} options={BORDER_STYLES} onChange={set('outlineStyle')} />
-        <CInput label="Off" value={get('outlineOffset')} onChange={set('outlineOffset')} placeholder="0px" />
+        <CNumericInput label="Off" value={get('outlineOffset')} onChange={set('outlineOffset')} placeholder="0" units={['px']} />
       </div>
     </div>
   );
@@ -895,10 +1071,10 @@ function ShadowControls({ nodeId }: { nodeId: string }) {
       </div>
       <Divider />
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="X"  value={sh.x}      onChange={(v) => upd({ x: v })}      placeholder="0px" />
-        <CInput label="Y"  value={sh.y}      onChange={(v) => upd({ y: v })}      placeholder="4px" />
-        <CInput label="Bl" value={sh.blur}   onChange={(v) => upd({ blur: v })}   placeholder="12px" />
-        <CInput label="Sp" value={sh.spread} onChange={(v) => upd({ spread: v })} placeholder="0px" />
+        <CNumericInput label="X"  value={sh.x}      onChange={(v) => upd({ x: v })}      placeholder="0"  units={['px']} />
+        <CNumericInput label="Y"  value={sh.y}      onChange={(v) => upd({ y: v })}      placeholder="4"  units={['px']} />
+        <CNumericInput label="Bl" value={sh.blur}   onChange={(v) => upd({ blur: v })}   placeholder="12" units={['px']} min={0} />
+        <CNumericInput label="Sp" value={sh.spread} onChange={(v) => upd({ spread: v })} placeholder="0"  units={['px']} />
       </div>
       <CColor label="Col" value={sh.color} onChange={(v) => upd({ color: v })} />
       <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -968,19 +1144,19 @@ function TransformControls({ nodeId }: { nodeId: string }) {
     <div className="px-3 pb-3 flex flex-col gap-2">
       <SLabel>Translate</SLabel>
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="X" value={t.translateX} onChange={(v) => updT({ translateX: v })} placeholder="0px" />
-        <CInput label="Y" value={t.translateY} onChange={(v) => updT({ translateY: v })} placeholder="0px" />
+        <CNumericInput label="X" value={t.translateX} onChange={(v) => updT({ translateX: v })} placeholder="0" units={['px','%','rem','em']} />
+        <CNumericInput label="Y" value={t.translateY} onChange={(v) => updT({ translateY: v })} placeholder="0" units={['px','%','rem','em']} />
       </div>
       <SLabel>Scale</SLabel>
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="X" value={t.scaleX} onChange={(v) => updT({ scaleX: v })} placeholder="1" />
-        <CInput label="Y" value={t.scaleY} onChange={(v) => updT({ scaleY: v })} placeholder="1" />
+        <CNumericInput label="X" value={t.scaleX} onChange={(v) => updT({ scaleX: v })} placeholder="1" units={['']} step={0.1} min={0} />
+        <CNumericInput label="Y" value={t.scaleY} onChange={(v) => updT({ scaleY: v })} placeholder="1" units={['']} step={0.1} min={0} />
       </div>
       <SLabel>Rotate & Skew</SLabel>
       <div className="grid grid-cols-3 gap-1.5">
-        <CInput label="Rot"  value={t.rotate} onChange={(v) => updT({ rotate: v })} placeholder="0deg" />
-        <CInput label="SkX"  value={t.skewX}  onChange={(v) => updT({ skewX: v })}  placeholder="0deg" />
-        <CInput label="SkY"  value={t.skewY}  onChange={(v) => updT({ skewY: v })}  placeholder="0deg" />
+        <CNumericInput label="Rot" value={t.rotate} onChange={(v) => updT({ rotate: v })} placeholder="0" units={['deg','rad','turn']} />
+        <CNumericInput label="SkX" value={t.skewX}  onChange={(v) => updT({ skewX: v })}  placeholder="0" units={['deg']} />
+        <CNumericInput label="SkY" value={t.skewY}  onChange={(v) => updT({ skewY: v })}  placeholder="0" units={['deg']} />
       </div>
       <SLabel>Origin</SLabel>
       <div className="grid gap-0.5 mb-1" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
@@ -997,7 +1173,7 @@ function TransformControls({ nodeId }: { nodeId: string }) {
       <CInput label="Origin" value={origin} onChange={(v) => update(nodeId, { [bpKey]: { ...bpS, transformOrigin: v } })} placeholder="center center" />
       <Divider />
       <CInput label="CSS" value={rawCSS} onChange={(v) => update(nodeId, { [bpKey]: { ...bpS, transform: v } })} placeholder="rotate(0deg) scale(1)" />
-      <CInput label="Perspective" value={get('perspective')} onChange={(v) => update(nodeId, { [bpKey]: { ...bpS, perspective: v } })} placeholder="1000px" />
+      <CNumericInput label="Perspective" value={get('perspective')} onChange={(v) => update(nodeId, { [bpKey]: { ...bpS, perspective: v } })} placeholder="1000" units={['px','rem','vw']} />
     </div>
   );
 }
@@ -1084,9 +1260,9 @@ function FlexGridItemControls({ nodeId }: { nodeId: string }) {
     <div className="px-3 pb-3 flex flex-col gap-2">
       <SLabel>Flex Item</SLabel>
       <div className="grid grid-cols-3 gap-1.5">
-        <CInput label="Grow"   value={get('flexGrow')}   onChange={set('flexGrow')}   placeholder="0"    />
-        <CInput label="Shrink" value={get('flexShrink')} onChange={set('flexShrink')} placeholder="1"    />
-        <CInput label="Basis"  value={get('flexBasis')}  onChange={set('flexBasis')}  placeholder="auto" />
+        <CNumericInput label="Grow"   value={get('flexGrow')}   onChange={set('flexGrow')}   placeholder="0" units={['']} step={0.1} min={0} />
+        <CNumericInput label="Shrink" value={get('flexShrink')} onChange={set('flexShrink')} placeholder="1" units={['']} step={0.1} min={0} />
+        <CInput        label="Basis"  value={get('flexBasis')}  onChange={set('flexBasis')}  placeholder="auto" />
       </div>
       <CSelect label="Align Self"
         value={get('alignSelf') || 'auto'}
@@ -1105,7 +1281,7 @@ function FlexGridItemControls({ nodeId }: { nodeId: string }) {
         options={[{value:'auto',label:'Auto'},{value:'start',label:'Start'},{value:'center',label:'Center'},{value:'end',label:'End'},{value:'stretch',label:'Stretch'}]}
         onChange={set('justifySelf')}
       />
-      <CInput label="Order" value={get('order')} onChange={set('order')} placeholder="0" />
+      <CNumericInput label="Order" value={get('order')} onChange={set('order')} placeholder="0" units={['']} step={1} />
     </div>
   );
 }
@@ -1130,7 +1306,7 @@ function AppearanceControls({ nodeId }: { nodeId: string }) {
   return (
     <div className="px-3 pb-3 flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-1.5">
-        <CInput label="Op"  value={get('opacity')} onChange={set('opacity')} placeholder="1"       />
+        <CNumericInput label="Op" value={get('opacity')} onChange={set('opacity')} placeholder="1" units={['']} step={0.01} min={0} max={1} />
         <CInput label="Cur" value={get('cursor')}  onChange={set('cursor')}  placeholder="default" />
       </div>
       <CSelect label="Visibility" value={get('visibility') || 'visible'}
@@ -1229,8 +1405,8 @@ function AnimationControls({ nodeId }: { nodeId: string }) {
       {hasAnim && (
         <>
           <div className="grid grid-cols-2 gap-1.5">
-            <CInput label="Dur"   value={get('--nx-enter-duration') || '0.5s'} onChange={set('--nx-enter-duration')} placeholder="0.5s" />
-            <CInput label="Delay" value={get('--nx-enter-delay')    || '0s'}   onChange={set('--nx-enter-delay')}    placeholder="0s"   />
+            <CNumericInput label="Dur"   value={get('--nx-enter-duration') || '0.5s'} onChange={set('--nx-enter-duration')} placeholder="0.5" units={['s','ms']} step={0.1} min={0} />
+            <CNumericInput label="Delay" value={get('--nx-enter-delay')    || '0s'}   onChange={set('--nx-enter-delay')}    placeholder="0"   units={['s','ms']} step={0.1} min={0} />
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <CSelect label="Easing"
@@ -1359,6 +1535,202 @@ function InteractionControls({ nodeId }: { nodeId: string }) {
         className="w-full rounded text-[12px] resize-none font-mono"
         style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.09)', color:'#dde4dd', outline:'none', padding:'6px 8px' }}
       />
+    </div>
+  );
+}
+
+// ─── Visibility & Access controls (Task 145) ──────────────────────────────────
+
+function VisibilityAccessControls({ nodeId }: { nodeId: string }) {
+  const node             = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
+  const roleHierarchy    = useCanvasStore((s) => s.page?.roleConfig?.roleHierarchy ?? []);
+  const updateVisibility = useCanvasStore((s) => s.updateNodeRlsVisibility);
+  const pageVariables    = useDataBindStore((s) => s.variables);
+
+  if (!node) return null;
+
+  const rule          = node.rlsVisibility;
+  const selectedRoles = rule?.roles ?? [];
+  const action        = rule?.action ?? 'hide';
+  const redirectTo    = rule?.redirectTo ?? '';
+  const condition     = rule?.condition;
+
+  const OPERATORS = [
+    { value: 'eq',         label: '= equals' },
+    { value: 'neq',        label: '≠ not equals' },
+    { value: 'gt',         label: '> greater than' },
+    { value: 'gte',        label: '≥ greater or eq' },
+    { value: 'lt',         label: '< less than' },
+    { value: 'lte',        label: '≤ less or eq' },
+    { value: 'contains',   label: 'contains' },
+    { value: 'notContains',label: 'not contains' },
+    { value: 'isEmpty',    label: 'is empty' },
+    { value: 'notEmpty',   label: 'is not empty' },
+  ];
+
+  const patchRule = (patch: Partial<NonNullable<typeof rule>>) => {
+    if (selectedRoles.length === 0) return;
+    const ruleBase: import('@nexus/core').VisibilityRule = { roles: selectedRoles, action };
+    if (redirectTo) ruleBase.redirectTo = redirectTo;
+    if (condition)  ruleBase.condition  = condition;
+    updateVisibility(nodeId, { ...ruleBase, ...patch });
+  };
+
+  const toggleRole = (role: string) => {
+    const newRoles = selectedRoles.includes(role)
+      ? selectedRoles.filter((r) => r !== role)
+      : [...selectedRoles, role];
+    if (newRoles.length === 0) {
+      updateVisibility(nodeId, undefined);
+    } else {
+      const r: import('@nexus/core').VisibilityRule = { roles: newRoles, action };
+      if (redirectTo) r.redirectTo = redirectTo;
+      if (condition)  r.condition  = condition;
+      updateVisibility(nodeId, r);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)',
+    borderRadius: 4, color: '#dde4dd', fontSize: 11, padding: '3px 6px', outline: 'none',
+  };
+
+  return (
+    <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {roleHierarchy.length === 0 ? (
+        <p style={{ fontSize: 10, color: '#4a5f4e' }}>
+          No roles configured. Add a roleConfig to this page in settings.
+        </p>
+      ) : (
+        <>
+          {/* ── Role chips ─────────────────────────────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 10, color: '#7a8f7e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Visible to roles</span>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {roleHierarchy.map((role) => {
+                const active = selectedRoles.includes(role);
+                return (
+                  <button
+                    key={role}
+                    onClick={() => toggleRole(role)}
+                    style={{
+                      fontSize: 10, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
+                      background: active ? 'rgba(16,183,127,0.15)' : 'rgba(255,255,255,0.05)',
+                      color: active ? '#10b77f' : '#bbcabf',
+                      border: `1px solid ${active ? 'rgba(16,183,127,0.30)' : 'rgba(255,255,255,0.08)'}`,
+                    }}
+                  >
+                    {role}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedRoles.length > 0 && (
+            <>
+              {/* ── Action dropdown ──────────────────────────────────── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 10, color: '#7a8f7e', width: 48, flexShrink: 0 }}>Action</span>
+                <select
+                  value={action}
+                  onChange={(e) => patchRule({ action: e.target.value as 'hide' | 'redirect' })}
+                  style={inputStyle}
+                >
+                  <option value="hide">Hide element</option>
+                  <option value="redirect">Redirect page</option>
+                </select>
+              </div>
+
+              {/* ── Redirect URL ─────────────────────────────────────── */}
+              {action === 'redirect' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 10, color: '#7a8f7e', width: 48, flexShrink: 0 }}>URL</span>
+                  <input
+                    type="url"
+                    value={redirectTo}
+                    placeholder="https://…"
+                    onChange={(e) => { const v = e.target.value; if (v) patchRule({ redirectTo: v }); else { const r2: import('@nexus/core').VisibilityRule = { roles: selectedRoles, action }; if (condition) r2.condition = condition; updateVisibility(nodeId, r2); } }}
+                    style={inputStyle}
+                  />
+                </div>
+              )}
+
+              {/* ── Condition builder ────────────────────────────────── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 10, color: '#7a8f7e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Condition (optional)
+                </span>
+                <p style={{ fontSize: 9, color: '#4a5f4e', margin: 0 }}>
+                  AND condition on a variable — refines role-based visibility further.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {/* Variable picker */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10, color: '#7a8f7e', width: 48, flexShrink: 0 }}>Variable</span>
+                    <select
+                      value={condition?.variableId ?? ''}
+                      onChange={(e) => {
+                        if (!e.target.value) {
+                          const rc: import('@nexus/core').VisibilityRule = { roles: selectedRoles, action };
+                          if (redirectTo) rc.redirectTo = redirectTo;
+                          updateVisibility(nodeId, rc);
+                        } else {
+                          patchRule({ condition: { variableId: e.target.value, operator: condition?.operator ?? 'eq', value: condition?.value ?? '' } });
+                        }
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="">— none —</option>
+                      {pageVariables.map((v) => (
+                        <option key={v.id} value={v.id}>{v.label || v.id}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {condition?.variableId && (
+                    <>
+                      {/* Operator */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 10, color: '#7a8f7e', width: 48, flexShrink: 0 }}>Op</span>
+                        <select
+                          value={condition.operator}
+                          onChange={(e) => patchRule({ condition: { ...condition!, operator: e.target.value as 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'notContains' | 'isEmpty' | 'notEmpty' } })}
+                          style={inputStyle}
+                        >
+                          {OPERATORS.map((op) => (
+                            <option key={op.value} value={op.value}>{op.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Value (hidden for isEmpty/notEmpty) */}
+                      {!['isEmpty', 'notEmpty'].includes(condition.operator) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10, color: '#7a8f7e', width: 48, flexShrink: 0 }}>Value</span>
+                          <input
+                            type="text"
+                            value={String(condition.value ?? '')}
+                            placeholder="compare value"
+                            onChange={(e) => patchRule({ condition: { ...condition, value: e.target.value } })}
+                            style={inputStyle}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {selectedRoles.length === 0 && (
+            <p style={{ fontSize: 10, color: '#4a5f4e' }}>
+              No role restrictions — visible to all users.
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1677,6 +2049,8 @@ function ElementProperties({ nodeId }: { nodeId: string }) {
                 <AccSection id="overflow"     label="Overflow"       icon={Maximize2}><OverflowControls      nodeId={nodeId} /></AccSection>
                 <AccSection id="animation"    label="Animation"      icon={Sparkles} ><AnimationControls     nodeId={nodeId} /></AccSection>
                 <AccSection id="interactions" label="Interactions"   icon={Zap}      badge="NEW"><InteractionControls nodeId={nodeId} /></AccSection>
+                <AccSection id="visibility-access" label="Visibility & Access" icon={Shield}><VisibilityAccessControls nodeId={nodeId} /></AccSection>
+                <AccSection id="actions" label="Actions" icon={Zap} badge="VAE"><ActionsPipelineEditor nodeId={nodeId} /></AccSection>
               </Accordion.Root>
             </>
           )}

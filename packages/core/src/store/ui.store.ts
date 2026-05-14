@@ -11,7 +11,7 @@ import { devtools, persist } from 'zustand/middleware';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ActiveBreakpoint = 'desktop' | 'tablet' | 'mobile';
-export type LeftPanelTab = 'widgets' | 'layers' | 'templates' | 'ai';
+export type LeftPanelTab = 'widgets' | 'layers' | 'templates' | 'ai' | 'marketplace';
 
 export const BREAKPOINT_CANVAS_WIDTHS: Record<ActiveBreakpoint, number | null> = {
   desktop: null,

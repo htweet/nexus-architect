@@ -5,6 +5,11 @@
  *   "On publish, the output strategy is static HTML compilation — not a PHP
  *    template that re-renders the JSON on every page request."
  *
+ * VAE Gap A/F additions:
+ *   compilePage now injects:
+ *     • window.__NEXUS_STATE__ for data-bind runtime initialisation
+ *     • PWA head tags (manifest, SW, install prompt deferral) when pwaConfig.enabled
+ *
  * Usage:
  *   import { compilePage } from '@nexus/core/compiler';
  *   const result = compilePage(page);
@@ -43,6 +48,8 @@ export interface CompileResult {
  *
  * 1. Runs the CSS compiler  → scoped stylesheet + class name map
  * 2. Runs the HTML compiler → complete <!DOCTYPE html> document
+ *    - Injects window.__NEXUS_STATE__ if page has variables
+ *    - Injects PWA head tags if page.pwaConfig.enabled
  * 3. Returns both outputs + stats
  */
 export function compilePage(page: NexusPage): CompileResult {
@@ -50,7 +57,15 @@ export function compilePage(page: NexusPage): CompileResult {
   const { css, classNames, sizeKb: cssKb } = compileCss(page);
 
   // Step 2: compile HTML using the class names
-  const html = compileHtml(page, { compiledCss: css, classNames });
+  // Pass variables and pwaConfig so the compiler injects them
+  const html = compileHtml(page, {
+    compiledCss: css,
+    classNames,
+    variables:  page.variables ?? [],
+    ...(page.pwaConfig ? { pwaConfig: page.pwaConfig } : {}),
+  });
+
+  void cssKb; // used by CSS compiler internally
 
   // Stats
   const htmlKb      = parseFloat((new TextEncoder().encode(html).byteLength / 1024).toFixed(2));
@@ -68,3 +83,14 @@ export function compilePage(page: NexusPage): CompileResult {
     },
   };
 }
+
+// ─── PWA Compiler (VAE Task 147 + Gap F) ─────────────────────────────────────
+export {
+  generateManifest,
+  generateServiceWorker,
+  generateIconSet,
+  generatePWAHeadTags,
+  generateNexusStateScript,
+  compilePWA,
+} from './pwa.js';
+export type { PWACompileResult } from './pwa.js';

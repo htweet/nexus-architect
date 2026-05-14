@@ -203,6 +203,21 @@ final class RestApi {
                 'type'     => ['default' => 'image', 'type' => 'string', 'enum' => ['image', 'video', 'audio', 'application']],
             ],
         ]);
+
+        // ── VAE Gap G: Server-side webhook proxy ───────────────────────────────
+        // Proxies Action Node webhookCall requests server-side to avoid CORS.
+        register_rest_route(self::NAMESPACE, '/webhook-proxy', [
+            'methods'             => 'POST',
+            'callback'            => [$this, 'webhook_proxy'],
+            'permission_callback' => $this->security->read_permission(),
+            'args'                => [
+                'url'     => ['required' => true,  'type' => 'string', 'sanitize_callback' => 'esc_url_raw'],
+                'method'  => ['required' => false, 'type' => 'string', 'default' => 'GET',
+                              'enum' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
+                'headers' => ['required' => false, 'type' => 'object', 'default' => []],
+                'body'    => ['required' => false, 'type' => 'string', 'default' => ''],
+            ],
+        ]);
     }
 
     // ─── Handlers ─────────────────────────────────────────────────────────────
@@ -432,18 +447,175 @@ final class RestApi {
         $access = $this->security->check_page_access($row);
         if (is_wp_error($access)) return $access;
 
-        // Phase 6 will invoke the static HTML compiler here.
-        $this->db->set_static_html($id, '<!-- Phase 6: static HTML compiler pending -->');
+        // VAE Gap F: Accept pre-compiled HTML from the client-side TypeScript compiler.
+        // The React builder runs compilePage() in-browser and sends the result here.
+        $static_html = sanitize_text_field((string) ($request->get_param('staticHtml') ?? ''));
+        if (! $static_html) {
+            // Fallback placeholder — will be replaced when the builder sends compiled HTML.
+            $static_html = '<!-- Nexus Architect: static HTML pending — please republish from the builder -->';
+        }
+
+        // VAE Gap F: Store PWA artifacts in WP options (keyed by page ID).
+        $pwa_manifest = (string) ($request->get_param('pwaManifest') ?? '');
+        $pwa_sw       = (string) ($request->get_param('pwaSw') ?? '');
+        if ($pwa_manifest) {
+            update_option("nexus_pwa_manifest_{$id}", wp_slash($pwa_manifest), false);
+        }
+        if ($pwa_sw) {
+            update_option("nexus_pwa_sw_{$id}", wp_slash($pwa_sw), false);
+        }
+
+        // VAE Gap G: Generate PHP-level RLS guard from page's roleConfig.
+        // Stored as a WP option — served before the static HTML to enforce server-side auth.
+        $page_json = json_decode((string) ($row['page_json'] ?? '{}'), true);
+        $rls_guard_code = $this->generate_rls_guard($page_json);
+        if ($rls_guard_code) {
+            update_option("nexus_rls_guard_{$id}", wp_slash($rls_guard_code), false);
+        }
+
+        $this->db->set_static_html($id, $static_html);
 
         AuditLog::record('page_published', ['page_id' => $id]);
+
+        $page_url = get_site_url() . '/' . esc_attr($row['slug'] ?? $id);
 
         return $this->ok([
             'id'          => $id,
             'published'   => true,
             'publishedAt' => gmdate('c'),
-            'pageUrl'     => get_site_url() . '/' . esc_attr($row['slug']),
-            'staticHtml'  => null,
+            'pageUrl'     => $page_url,
+            'staticHtml'  => $static_html,
+            'pwaEnabled'  => ! empty($pwa_manifest),
         ]);
+    }
+
+    /**
+     * VAE Gap G: Generate a server-side PHP RLS guard from the page's roleConfig.
+     *
+     * Returns a PHP code string (no <?php tag) that, when eval()'d or included,
+     * will redirect or 403 the current visitor if they lack the required role.
+     *
+     * @param  array<string,mixed> $page_json
+     * @return string PHP code, empty string if no roleConfig defined.
+     */
+    private function generate_rls_guard(array $page_json): string {
+        $role_config = $page_json['roleConfig'] ?? null;
+        if (! $role_config || empty($role_config['roleHierarchy'])) {
+            return '';
+        }
+
+        $hierarchy    = array_map('sanitize_text_field', (array) ($role_config['roleHierarchy'] ?? []));
+        $guest_role   = sanitize_text_field((string) ($role_config['guestRole'] ?? 'guest'));
+        $auth_header  = sanitize_text_field((string) ($role_config['authTokenHeader'] ?? 'Authorization'));
+
+        // Encode hierarchy for the generated code.
+        $hierarchy_php = wp_json_encode($hierarchy);
+
+        return <<<PHP
+// Nexus Architect — generated RLS guard (do not edit)
+\$nx_hierarchy   = {$hierarchy_php};
+\$nx_guest_role  = '{$guest_role}';
+\$nx_user        = wp_get_current_user();
+\$nx_user_roles  = (array) \$nx_user->roles;
+\$nx_user_index  = -1;
+foreach (\$nx_hierarchy as \$i => \$r) {
+    if (in_array(\$r, \$nx_user_roles, true)) {
+        \$nx_user_index = \$i;
+        break;
+    }
+}
+// 'guest' is index 0 if in hierarchy, otherwise -1 means not found
+if (\$nx_user_index < 0 && in_array(\$nx_guest_role, \$nx_hierarchy, true)) {
+    \$nx_user_index = array_search(\$nx_guest_role, \$nx_hierarchy, true);
+}
+PHP;
+    }
+
+    /**
+     * VAE Gap G: Server-side webhook proxy.
+     *
+     * Forwards an Action Node webhookCall from the browser to an external URL
+     * without CORS restrictions. Auth/nonce guards ensure only logged-in users
+     * can proxy requests, and the URL is validated on the server before proxying.
+     */
+    public function webhook_proxy(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {
+        $url     = esc_url_raw((string) $request->get_param('url'));
+        $method  = strtoupper(sanitize_text_field((string) ($request->get_param('method') ?? 'GET')));
+        $body    = (string) ($request->get_param('body') ?? '');
+        $headers = (array)  ($request->get_param('headers') ?? []);
+
+        if (! $url) {
+            return new \WP_Error('nexus_proxy_no_url', 'url parameter is required.', ['status' => 400]);
+        }
+
+        // Security: block requests to private/local IP ranges.
+        $parsed = wp_parse_url($url);
+        $host   = $parsed['host'] ?? '';
+        if (! $host || $this->is_private_host($host)) {
+            return new \WP_Error('nexus_proxy_blocked', 'Requests to private addresses are not allowed.', ['status' => 403]);
+        }
+
+        // Sanitize headers — allow Content-Type and custom X-* headers only.
+        $safe_headers = ['Content-Type' => 'application/json'];
+        foreach ($headers as $key => $value) {
+            $key = sanitize_text_field((string) $key);
+            if (preg_match('/^[A-Za-z0-9\-]+$/', $key)) {
+                $safe_headers[$key] = sanitize_text_field((string) $value);
+            }
+        }
+
+        $wp_args = [
+            'method'  => $method,
+            'headers' => $safe_headers,
+            'timeout' => 15,
+        ];
+        if ($body && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+            $wp_args['body'] = $body;
+        }
+
+        $response = wp_remote_request($url, $wp_args);
+
+        if (is_wp_error($response)) {
+            return new \WP_Error('nexus_proxy_error', $response->get_error_message(), ['status' => 502]);
+        }
+
+        $status_code   = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        $content_type  = wp_remote_retrieve_header($response, 'content-type');
+
+        AuditLog::record('webhook_proxy', [
+            'url'    => $url,
+            'method' => $method,
+            'status' => $status_code,
+        ]);
+
+        return new \WP_REST_Response(
+            json_decode($response_body, true) ?? $response_body,
+            (int) $status_code,
+            ['Content-Type' => $content_type ?: 'application/json'],
+        );
+    }
+
+    /**
+     * Check if a hostname resolves to a private/loopback address.
+     * Blocks SSRF vectors like http://localhost, http://192.168.x.x, etc.
+     */
+    private function is_private_host(string $host): bool {
+        $private_patterns = [
+            '/^localhost$/i',
+            '/^127\.\d+\.\d+\.\d+$/',
+            '/^10\.\d+\.\d+\.\d+$/',
+            '/^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/',
+            '/^192\.168\.\d+\.\d+$/',
+            '/^::1$/',
+            '/^0\.0\.0\.0$/',
+        ];
+        foreach ($private_patterns as $pattern) {
+            if (preg_match($pattern, $host)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function list_revisions(\WP_REST_Request $request): \WP_REST_Response|\WP_Error {

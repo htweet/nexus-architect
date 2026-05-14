@@ -12,8 +12,10 @@
  *   3. Node CSS classes come from the CSS compiler's classNames map.
  *   4. Output is a complete <!DOCTYPE html> document with:
  *      - SEO meta tags (title, description, OG tags)
+ *      - PWA head tags (manifest, SW registration, install prompt deferral) [VAE Gap F]
  *      - Compiled scoped CSS in <style>
  *      - Custom CSS from page.customCss
+ *      - __NEXUS_STATE__ inline script (data-bind initial values) [VAE Gap A]
  *      - Semantic HTML body
  *      - Intersection Observer script for entrance animations
  *      - Custom JS from page.customJs
@@ -22,7 +24,10 @@
  */
 
 import type { NexusPage, NexusNode } from '../types/schema.js';
-import { ENTRANCE_OBSERVER_SCRIPT } from './css-compiler.js';
+import type { NexusVariable }        from '../types/dataBind.js';
+import type { PWAConfig }            from '../types/pwa.js';
+import { ENTRANCE_OBSERVER_SCRIPT }  from './css-compiler.js';
+import { generatePWAHeadTags, generateNexusStateScript } from './pwa.js';
 
 // ─── Security helpers ─────────────────────────────────────────────────────────
 
@@ -270,25 +275,51 @@ export interface HtmlCompileOptions {
   classNames: Record<string, string>;
   /** Optional public URL of a separately hosted CSS file (used by WP adapter) */
   cssFileUrl?: string;
+  /**
+   * Page variables for __NEXUS_STATE__ injection (data-bind runtime).
+   * If omitted, no __NEXUS_STATE__ script is injected.
+   */
+  variables?: NexusVariable[];
+  /**
+   * PWA config for manifest link + SW registration + install prompt deferral.
+   * If omitted or pwaConfig.enabled=false, no PWA tags are injected.
+   */
+  pwaConfig?: PWAConfig;
 }
 
 export function compileHtml(page: NexusPage, options: HtmlCompileOptions): string {
-  const { compiledCss, classNames, cssFileUrl } = options;
+  const { compiledCss, classNames, cssFileUrl, variables, pwaConfig } = options;
 
   const bodyHtml = renderNode(page.rootNodeId, page.nodeMap, classNames);
 
   const customCss = page.customCss?.trim();
   const customJs  = page.customJs?.trim();
 
+  // Data-bind state injection
+  const nexusStateScript = (variables && variables.length > 0)
+    ? `  ${generateNexusStateScript(variables)}`
+    : null;
+
+  // PWA head tags
+  const pwaHeadTags = pwaConfig?.enabled
+    ? generatePWAHeadTags(pwaConfig)
+        .split('\n')
+        .map((l) => `  ${l}`)
+        .join('\n')
+        .trim()
+    : null;
+
   const parts: string[] = [
     `<!DOCTYPE html>`,
-    `<html lang="${page.seoMeta?.canonicalUrl ? 'en' : 'en'}">`,
+    `<html lang="en">`,
     `<head>`,
     buildHeadMeta(page),
     cssFileUrl
       ? `  <link rel="stylesheet" href="${safeUrl(cssFileUrl)}">`
       : `  <style id="nx-compiled">\n${compiledCss}\n  </style>`,
     customCss ? `  <style id="nx-custom">\n${customCss}\n  </style>` : null,
+    nexusStateScript,
+    pwaHeadTags,
     `  <!-- Nexus Architect v1 — compiled ${new Date().toISOString()} -->`,
     `</head>`,
     `<body>`,

@@ -21,6 +21,83 @@ final class Enqueue {
     /** Vite dev server URL. Define in wp-config.php during development. */
     private const DEV_SERVER = 'http://localhost:3000';
 
+    /**
+     * VAE Gap G: Register PWA root-file serving hooks.
+     *
+     * Call this from the plugin bootstrap (nexus-architect.php) during 'init':
+     *   add_action('init', [$enqueue, 'register_pwa_hooks']);
+     *
+     * When a request comes in for /manifest.json or /sw.js, we check if there's
+     * a published Nexus page whose PWA artifacts should be served and output them.
+     *
+     * Strategy: Use WP query vars (nexus_pwa_file, nexus_pwa_page_id) injected by
+     * add_rewrite_rule so WP's router picks them up before the 404 handler.
+     */
+    public function register_pwa_hooks(): void {
+        // Add rewrite rules for PWA root files.
+        add_rewrite_rule('^manifest\.json$', 'index.php?nexus_pwa_file=manifest', 'top');
+        add_rewrite_rule('^sw\.js$',         'index.php?nexus_pwa_file=sw',       'top');
+
+        // Register our custom query var.
+        add_filter('query_vars', function (array $vars): array {
+            $vars[] = 'nexus_pwa_file';
+            return $vars;
+        });
+
+        // Serve the file when the query var is present.
+        add_action('template_redirect', [$this, 'serve_pwa_file']);
+    }
+
+    /**
+     * Serve manifest.json or sw.js from WP options if they were stored by publish_page.
+     *
+     * Looks up the most-recently-published PWA page; if multiple pages have PWA
+     * enabled, the most recently published one wins for the root manifest/SW.
+     * (Future: per-slug routing via dedicated rewrite rules.)
+     */
+    public function serve_pwa_file(): void {
+        $file_type = get_query_var('nexus_pwa_file');
+        if (! $file_type) {
+            return;
+        }
+
+        // Find any published page that has PWA artifacts.
+        // We search options with the nexus_pwa_manifest_ prefix.
+        global $wpdb;
+        $row = $wpdb->get_row(
+            "SELECT option_name FROM {$wpdb->options}
+             WHERE option_name LIKE 'nexus_pwa_manifest_%'
+             ORDER BY option_id DESC
+             LIMIT 1",
+            ARRAY_A,
+        );
+
+        if (! $row) {
+            return; // No PWA published yet — fall through to normal 404.
+        }
+
+        $page_id = str_replace('nexus_pwa_manifest_', '', (string) $row['option_name']);
+
+        if ($file_type === 'manifest') {
+            $content = get_option("nexus_pwa_manifest_{$page_id}", '');
+            if (! $content) return;
+            header('Content-Type: application/manifest+json; charset=utf-8');
+            header('Cache-Control: public, max-age=3600');
+            echo wp_unslash($content); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+            exit;
+        }
+
+        if ($file_type === 'sw') {
+            $content = get_option("nexus_pwa_sw_{$page_id}", '');
+            if (! $content) return;
+            header('Content-Type: application/javascript; charset=utf-8');
+            header('Cache-Control: public, max-age=86400');
+            header('Service-Worker-Allowed: /');
+            echo wp_unslash($content); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+            exit;
+        }
+    }
+
     public function enqueue_builder(string $hook): void {
         // Only load on our admin page.
         if ('toplevel_page_nexus-architect' !== $hook) {

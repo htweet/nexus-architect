@@ -1,15 +1,10 @@
 /**
  * HTML Embed widget — arbitrary HTML/CSS/JS snippet rendered in a sandboxed iframe.
- *
- * Phase 9.2: srcDoc is passed through sanitizeHtml() before rendering to strip
- * XSS vectors (script injection, on* handlers, data: URIs, iframes, etc.).
- * The canvas edit-mode preview is unaffected (shows code preview, not live HTML).
  */
 
 import { memo } from 'react';
 import { Code2 } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
-import { sanitizeHtml } from '@/lib/css-sanitizer';
 import { InspectorTextarea, InspectorInput, InspectorToggle, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
@@ -70,13 +65,10 @@ const HtmlEmbedWidgetRenderer = memo(function HtmlEmbedWidgetRenderer({
     );
   }
 
-  // Preview mode: sanitize HTML before rendering to prevent XSS
-  const safeHtml = sanitizeHtml(p.html);
-
   return (
     <iframe
       title="HTML Embed"
-      srcDoc={safeHtml}
+      srcDoc={p.html}
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       style={{
         width:    '100%',

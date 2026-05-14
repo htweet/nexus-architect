@@ -1,43 +1,30 @@
 /**
- * CanvasNodeWrapper — selection + DnD + context chrome for every canvas node.
+ * CanvasNodeWrapper — selection ring + DnD chrome for every canvas node.
  *
- * Phase 3 upgrades:
- *   • Double-click enters inline rich-text editing mode (sets editingNodeId)
- *   • Right-click opens NodeContextMenu at cursor position
- *   • Toolbar extended: Lock / Hide / Move Up / Move Down
- *   • Undo history pushed before structural mutations
+ * The action toolbar (Move / Lock / Hide / Duplicate / Delete) and the
+ * type-label badge have been extracted into StableNodeOverlay (a React Portal)
+ * so they remain perfectly horizontal even when the node has CSS transforms
+ * (rotate, skew, scale) applied via the Style inspector.
  *
- * Phase 8 UX overhaul:
- *   • node.styles (base + breakpoint override) applied to wrapper so
- *     every RightSidebar style change reflects instantly on canvas.
- *   • Drag listeners moved to main wrapper div — entire element is
- *     draggable (6 px activation distance prevents accidental drags).
- *   • Hover ring now CSS group-hover only → zero Zustand re-renders on
- *     mouse-move, eliminating the border flicker completely.
- *   • Drag handle is always visible when selected, fades in on hover
- *     via group-hover (pure CSS, no state).
- *   • Toolbar buttons call onPointerDown stopPropagation so they never
- *     accidentally start a drag.
- *
- * Figma-fluid DnD upgrade:
- *   • data-node-id attribute added for SmartGuidesOverlay DOM queries.
- *   • Dragging opacity lowered to 0.2 for a more pronounced "lifted" feel.
+ * This wrapper is responsible for:
+ *   • Applying breakpoint-aware merged styles to the element
+ *   • Providing useSortable DnD handles (whole-element drag)
+ *   • Rendering the 1px Emerald selection ring (pure CSS, no JS re-render on hover)
+ *   • Rendering the left-gutter drag handle badge
+ *   • Isolating CSS `filter` onto an inner wrapper so it doesn't bleed onto
+ *     absolutely-positioned overlays
+ *   • Forwarding click / double-click / hover events to selection store
  */
 
 import { useCallback, type ReactNode } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS }         from '@dnd-kit/utilities';
-import {
-  Copy, Trash2, GripVertical,
-  Lock, Unlock, Eye, EyeOff,
-  ChevronUp, ChevronDown,
-} from 'lucide-react';
-import { cn } from '@/lib/cn';
-import { useCanvasStore, useSelectionStore, useUIStore } from '@nexus/core';
+import { useSortable }           from '@dnd-kit/sortable';
+import { CSS }                   from '@dnd-kit/utilities';
+import { GripVertical, Database } from 'lucide-react';
+import { cn }                    from '@/lib/cn';
+import { useCanvasStore, useSelectionStore, useUIStore, useDataBindStore } from '@nexus/core';
 import type { ActiveBreakpoint } from '@nexus/core';
-import { getWidget } from '@/widgets/registry';
-import { NodeContextMenu } from './NodeContextMenu';
-import { pushHistory } from '@/lib/history';
+import { getWidget }             from '@/widgets/registry';
+import { NodeContextMenu }       from './NodeContextMenu';
 
 // ─── Breakpoint → NodeStyles key ─────────────────────────────────────────────
 
@@ -50,39 +37,50 @@ const BP_KEY: Record<ActiveBreakpoint, 'base' | 'md' | 'sm'> = {
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface CanvasNodeWrapperProps {
-  nodeId: string;
+  nodeId:     string;
   isPreview?: boolean | undefined;
-  children: ReactNode;
+  children:   ReactNode;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWrapperProps) {
   const node           = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
-  const removeNode     = useCanvasStore((s) => s.removeNode);
-  const duplicateNode  = useCanvasStore((s) => s.duplicateNode);
-  const toggleLock     = useCanvasStore((s) => s.toggleNodeLock);
-  const toggleHidden   = useCanvasStore((s) => s.toggleNodeHidden);
-  const moveNode       = useCanvasStore((s) => s.moveNode);
   const selectNode     = useSelectionStore((s) => s.selectNode);
-  const clearSelection = useSelectionStore((s) => s.clearSelection);
   const selectedIds    = useSelectionStore((s) => s.selectedIds);
   const setHovered     = useSelectionStore((s) => s.setHovered);
   const editingNodeId  = useSelectionStore((s) => s.editingNodeId);
   const setEditingNode = useSelectionStore((s) => s.setEditingNode);
-
-  // ── Breakpoint-aware style merge ─────────────────────────────────────────
   const activeBreakpoint = useUIStore((s) => s.activeBreakpoint);
+  const bindVariables  = useDataBindStore((s) => s.variables);
+
+  // BOUND badge: true if any stateBinding references a real variable
+  const isBound = !isPreview && (() => {
+    const bindings = node?.stateBindings ?? [];
+    if (!bindings.length) return false;
+    const varIds = new Set(bindVariables.map((v) => v.id));
+    return bindings.some((b) => varIds.has(b.variableId));
+  })();
+
+  // Broken-binding flag: a stateBinding exists but the variable has been deleted
+  const hasBrokenBinding = !isPreview && (() => {
+    const bindings = node?.stateBindings ?? [];
+    if (!bindings.length) return false;
+    const varIds = new Set(bindVariables.map((v) => v.id));
+    return bindings.some((b) => !varIds.has(b.variableId));
+  })();
 
   const isSelected = selectedIds.includes(nodeId);
   const isEditing  = editingNodeId === nodeId;
 
-  // ── Merge node.styles[base] + node.styles[bpKey] for inline style ────────
+  // ── Breakpoint-aware style merge ─────────────────────────────────────────
   const computedNodeStyles = (() => {
     if (!node?.styles) return {} as React.CSSProperties;
     const bpKey    = BP_KEY[activeBreakpoint];
-    const base     = (node.styles.base ?? {}) as React.CSSProperties;
-    const override = bpKey !== 'base' ? ((node.styles[bpKey] ?? {}) as React.CSSProperties) : {};
+    const base     = (node.styles.base   ?? {}) as React.CSSProperties;
+    const override = bpKey !== 'base'
+      ? ((node.styles[bpKey] ?? {}) as React.CSSProperties)
+      : {};
     return { ...base, ...override } as React.CSSProperties;
   })();
 
@@ -101,24 +99,26 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
   });
 
   /**
-   * Merge order:
+   * Style merge order:
    *   1. User-defined node styles (dimensions, typography, colours …)
-   *   2. DnD transform — must always sit on top so dragged elements move correctly
-   *   3. Dragging opacity — 0.2 gives a pronounced "lifted off canvas" feel
+   *   2. DnD transform — only injected while actively dragging/settling
+   *   3. Dragging opacity — 0.4 so insertion lines are visible underneath
+   *      (the DragOverlay shows a full-opacity ghost clone)
+   *
+   * filter is split off to an inner wrapper (see bottom of JSX) so
+   * `filter: blur(…)` doesn't create a stacking context that swallows
+   * any fixed-position overlays rendered as portals (StableNodeOverlay).
    */
-  const style: React.CSSProperties = {
-    ...computedNodeStyles,
-    transform:  CSS.Transform.toString(transform),
-    transition: transition ?? undefined,
-    ...(isDragging ? { opacity: 0.2 } : {}),
-  };
+  const { filter: cssFilter, ...computedStylesWithoutFilter } =
+    computedNodeStyles as React.CSSProperties & { filter?: string };
 
-  // ── Sibling helpers ───────────────────────────────────────────────────────
-  const getSiblings = useCallback(() => {
-    if (!node?.parentId) return [];
-    const page = useCanvasStore.getState().page;
-    return page?.nodeMap[node.parentId]?.children.filter(Boolean) ?? [];
-  }, [node?.parentId]);
+  const dndTransform = CSS.Transform.toString(transform);
+  const style: React.CSSProperties = {
+    ...computedStylesWithoutFilter,
+    ...(dndTransform             ? { transform: dndTransform } : {}),
+    ...(dndTransform && transition ? { transition }            : {}),
+    ...(isDragging               ? { opacity: 0.4 }           : {}),
+  };
 
   // ── Event handlers ────────────────────────────────────────────────────────
   const handleClick = useCallback(
@@ -147,7 +147,6 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
     [isPreview, node, nodeId, selectNode, setEditingNode],
   );
 
-  // Hover → used by LayersPanel for sync; visuals handled via CSS group-hover
   const handleMouseEnter = useCallback(() => {
     if (!isPreview && !node?.locked) setHovered(nodeId);
   }, [isPreview, node?.locked, nodeId, setHovered]);
@@ -156,78 +155,7 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
     if (!isPreview) setHovered(null);
   }, [isPreview, setHovered]);
 
-  const handleDelete = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      pushHistory('Delete');
-      removeNode(nodeId);
-      clearSelection();
-    },
-    [nodeId, removeNode, clearSelection],
-  );
-
-  const handleDuplicate = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      pushHistory('Duplicate');
-      const newId = duplicateNode(nodeId);
-      if (newId) selectNode(newId);
-    },
-    [nodeId, duplicateNode, selectNode],
-  );
-
-  const handleToggleLock = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      pushHistory('Toggle Lock');
-      toggleLock(nodeId);
-    },
-    [nodeId, toggleLock],
-  );
-
-  const handleToggleHidden = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      pushHistory('Toggle Visibility');
-      toggleHidden(nodeId);
-    },
-    [nodeId, toggleHidden],
-  );
-
-  const handleMoveUp = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!node?.parentId) return;
-      const siblings = getSiblings();
-      const idx = siblings.indexOf(nodeId);
-      if (idx <= 0) return;
-      pushHistory('Move Up');
-      moveNode(nodeId, node.parentId, idx - 1);
-    },
-    [node?.parentId, nodeId, getSiblings, moveNode],
-  );
-
-  const handleMoveDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!node?.parentId) return;
-      const siblings = getSiblings();
-      const idx = siblings.indexOf(nodeId);
-      if (idx < 0 || idx >= siblings.length - 1) return;
-      pushHistory('Move Down');
-      moveNode(nodeId, node.parentId, idx + 2);
-    },
-    [node?.parentId, nodeId, getSiblings, moveNode],
-  );
-
   if (!node) return null;
-
-  const widgetDef   = getWidget(node.type);
-  const label       = node.label ?? widgetDef?.label ?? node.type;
-  const siblings    = getSiblings();
-  const myIndex     = siblings.indexOf(nodeId);
-  const canMoveUp   = myIndex > 0;
-  const canMoveDown = myIndex >= 0 && myIndex < siblings.length - 1;
 
   // Only attach DnD listeners when not in preview / locked / editing mode
   const dndProps = !isPreview && !node.locked && !isEditing
@@ -249,13 +177,13 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
           'relative group/node',
           !isPreview && 'nexus-canvas-node',
           !isPreview && isSelected && !isEditing && 'nexus-node-selected',
-          !isPreview && isEditing && 'nexus-node-editing',
-          node.locked && 'pointer-events-none opacity-60',
+          !isPreview && isEditing  && 'nexus-node-editing',
+          node.locked  && 'pointer-events-none opacity-60',
           !isPreview && !node.locked && !isEditing
             && 'cursor-grab active:cursor-grabbing',
         )}
       >
-        {/* ── Drag handle badge (left gutter) ────────────────────────────── */}
+        {/* ── Left-gutter drag-handle badge ──────────────────────────────── */}
         {!isPreview && !isEditing && (
           <div
             className={cn(
@@ -272,98 +200,42 @@ export function CanvasNodeWrapper({ nodeId, isPreview, children }: CanvasNodeWra
           </div>
         )}
 
-        {/* ── Type label badge (top-left, only when selected) ─────────────── */}
-        {!isPreview && isSelected && (
+        {/* ── BOUND / broken-binding badge ───────────────────────────────── */}
+        {(isBound || hasBrokenBinding) && (
           <div
-            className={cn(
-              'absolute -top-9 left-0 z-[100]',
-              'inline-flex items-center px-2.5 py-1',
-              'rounded-tr-md text-white select-none pointer-events-none',
-              'text-[11px] font-medium leading-none',
-              isEditing ? 'bg-[#f59e0b]' : 'bg-[#10b77f]',
-            )}
+            title={hasBrokenBinding ? 'Broken binding — variable deleted' : 'Data-bound node'}
+            style={{
+              position:    'absolute',
+              top:          2,
+              left:         2,
+              display:      'flex',
+              alignItems:   'center',
+              gap:           3,
+              background:   hasBrokenBinding ? 'rgba(245,158,11,0.12)' : 'rgba(16,183,127,0.12)',
+              border:       `1px solid ${hasBrokenBinding ? 'rgba(245,158,11,0.35)' : 'rgba(16,183,127,0.30)'}`,
+              borderRadius:  3,
+              padding:      '1px 4px',
+              fontSize:      9,
+              fontWeight:    700,
+              letterSpacing: '0.04em',
+              color:         hasBrokenBinding ? '#f59e0b' : '#10b77f',
+              pointerEvents: 'none',
+              zIndex:        20,
+            }}
           >
-            {isEditing ? '✏ Editing' : label}
+            <Database size={8} strokeWidth={2} />
+            {hasBrokenBinding ? '⚠ BROKEN' : 'BOUND'}
           </div>
         )}
 
-        {/* ── Action toolbar (top-right, only when selected + not editing) ── */}
-        {!isPreview && isSelected && !isEditing && (
-          <div
-            className={cn(
-              'absolute -top-9 right-0 z-[100]',
-              'flex items-center gap-1.5 h-8 px-2',
-              'rounded-t-md bg-[#0e1511] border border-[rgba(255,255,255,0.10)]',
-            )}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={handleMoveUp}
-              disabled={!canMoveUp}
-              className="flex h-6 w-7 items-center justify-center rounded text-[#bbcabf] hover:text-[#dde4dd] hover:bg-[rgba(255,255,255,0.05)] transition-colors duration-150 disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Move up"
-            >
-              <ChevronUp size={14} />
-            </button>
-            <button
-              onClick={handleMoveDown}
-              disabled={!canMoveDown}
-              className="flex h-6 w-7 items-center justify-center rounded text-[#bbcabf] hover:text-[#dde4dd] hover:bg-[rgba(255,255,255,0.05)] transition-colors duration-150 disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Move down"
-            >
-              <ChevronDown size={14} />
-            </button>
-
-            <div className="h-5 w-px mx-0.5" style={{ background: 'rgba(255,255,255,0.10)' }} />
-
-            <button
-              onClick={handleToggleLock}
-              className={cn(
-                'flex h-6 w-7 items-center justify-center rounded transition-colors duration-150',
-                node.locked
-                  ? 'text-amber-400 hover:text-amber-300'
-                  : 'text-[#bbcabf] hover:text-amber-400 hover:bg-amber-400/10',
-              )}
-              title={node.locked ? 'Unlock' : 'Lock'}
-            >
-              {node.locked ? <Lock size={13} /> : <Unlock size={13} />}
-            </button>
-            <button
-              onClick={handleToggleHidden}
-              className={cn(
-                'flex h-6 w-7 items-center justify-center rounded transition-colors duration-150',
-                node.hidden
-                  ? 'text-[#bbcabf] opacity-50'
-                  : 'text-[#bbcabf] hover:text-[#dde4dd] hover:bg-[rgba(255,255,255,0.05)]',
-              )}
-              title={node.hidden ? 'Show' : 'Hide'}
-            >
-              {node.hidden ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-
-            <div className="h-5 w-px mx-0.5" style={{ background: 'rgba(255,255,255,0.10)' }} />
-
-            <button
-              onClick={handleDuplicate}
-              className="flex h-6 w-7 items-center justify-center rounded text-[#bbcabf] hover:text-[#dde4dd] hover:bg-[rgba(255,255,255,0.05)] transition-colors duration-150"
-              title="Duplicate (⌘D)"
-            >
-              <Copy size={14} />
-            </button>
-            <button
-              onClick={handleDelete}
-              className="flex h-6 w-7 items-center justify-center rounded text-[#bbcabf] hover:text-[#ffb4ab] hover:bg-error/10 transition-colors duration-150"
-              title="Delete (⌫)"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
-
-        {/* ── Widget content ── */}
-        {children}
+        {/* ── Widget content ─────────────────────────────────────────────── */}
+        {/* filter isolated here so StableNodeOverlay portal is never blurred */}
+        {cssFilter
+          ? <div style={{ filter: cssFilter, width: '100%', height: '100%' }}>{children}</div>
+          : children
+        }
       </div>
     </NodeContextMenu>
   );
 }
+       

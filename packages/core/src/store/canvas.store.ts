@@ -9,7 +9,10 @@
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import { createNode } from '../types/schema.js';
-import type { NexusNode, NexusPage, NodeStyles, NodeVisibility } from '../types/schema.js';
+import type { NexusNode, NexusPage, NodeStyles, NodeVisibility, VisibilityRule } from '../types/schema.js';
+import type { NexusVariable } from '../types/dataBind.js';
+import type { ActionPipeline, SharedPipeline } from '../types/action-node.js';
+import type { PWAConfig } from '../types/pwa.js';
 
 // ─── State Shape ─────────────────────────────────────────────────────────────
 
@@ -85,6 +88,24 @@ interface CanvasActions {
 
   /** Update page-level metadata (title, slug, seoMeta, globalStyles, customCss, customJs). */
   updatePageMeta: (updates: Partial<Pick<NexusPage, 'title' | 'slug' | 'description' | 'seoMeta' | 'globalStyles' | 'customCss' | 'customJs'>>) => void;
+
+  /** Update page variables (triggers Data-Bind re-init on next render). */
+  updatePageVariables: (variables: NexusVariable[]) => void;
+
+  /** Update page config (pwaConfig, roleConfig). */
+  updatePageConfig: (updates: Partial<Pick<NexusPage, 'pwaConfig' | 'roleConfig'>>) => void;
+
+  /** Update a node's RLS visibility rule. */
+  updateNodeRlsVisibility: (nodeId: string, rule: VisibilityRule | undefined) => void;
+
+  /** Update a node's action pipelines. */
+  updateNodeActions: (nodeId: string, actions: ActionPipeline[]) => void;
+
+  /** Update page PWA config (partial merge). */
+  updatePWAConfig: (config: Partial<PWAConfig>) => void;
+
+  /** Replace the page-level shared pipeline list. */
+  updateSharedPipelines: (pipelines: SharedPipeline[]) => void;
 }
 
 // ─── Store ───────────────────────────────────────────────────────────────────
@@ -102,10 +123,20 @@ export const useCanvasStore = create<CanvasStore>()(
       saveError: null,
 
       // ── Actions ───────────────────────────────────────────────────────────
-      loadPage: (page) => set({ page, isDirty: false, saveError: null }, false, 'canvas/loadPage'),
+      loadPage: (page) => {
+        // Lazy import to avoid circular deps — dataBind.store imports from types only
+        import('../store/dataBind.store.js').then(({ useDataBindStore }) => {
+          useDataBindStore.getState().initFromPage(page.variables ?? []);
+        }).catch(() => {});
+        set({ page, isDirty: false, saveError: null }, false, 'canvas/loadPage');
+      },
 
-      clearCanvas: () =>
-        set({ page: null, isDirty: false, saveError: null }, false, 'canvas/clearCanvas'),
+      clearCanvas: () => {
+        import('../store/dataBind.store.js').then(({ useDataBindStore }) => {
+          useDataBindStore.getState().clearAll();
+        }).catch(() => {});
+        set({ page: null, isDirty: false, saveError: null }, false, 'canvas/clearCanvas');
+      },
 
       updateNodeProps: (nodeId, props) =>
         set(
@@ -432,6 +463,146 @@ export const useCanvasStore = create<CanvasStore>()(
           false,
           'canvas/updatePageMeta',
         ),
+
+      updatePageVariables: (variables) =>
+        set(
+          (state) => {
+            if (!state.page) return state;
+            // Re-init data bind store with updated variables
+            import('../store/dataBind.store.js').then(({ useDataBindStore }) => {
+              useDataBindStore.getState().initFromPage(variables);
+            }).catch(() => {});
+            return {
+              isDirty: true,
+              page: {
+                ...state.page,
+                variables,
+                updatedAt: new Date().toISOString(),
+              },
+            };
+          },
+          false,
+          'canvas/updatePageVariables',
+        ),
+
+      updatePageConfig: (updates) =>
+        set(
+          (state) => {
+            if (!state.page) return state;
+            return {
+              isDirty: true,
+              page: {
+                ...state.page,
+                ...updates,
+                updatedAt: new Date().toISOString(),
+              },
+            };
+          },
+          false,
+          'canvas/updatePageConfig',
+        ),
+
+      updateNodeRlsVisibility: (nodeId, rule) =>
+        set(
+          (state) => {
+            if (!state.page?.nodeMap[nodeId]) return state;
+            const existing = state.page.nodeMap[nodeId]!;
+            // exactOptionalPropertyTypes: omit the key when undefined
+            const { rlsVisibility: _omit, ...rest } = existing;
+            const updated = rule !== undefined
+              ? { ...rest, rlsVisibility: rule }
+              : rest;
+            return {
+              isDirty: true,
+              page: {
+                ...state.page,
+                updatedAt: new Date().toISOString(),
+                nodeMap: {
+                  ...state.page.nodeMap,
+                  [nodeId]: updated as NexusNode,
+                },
+              },
+            };
+          },
+          false,
+          'canvas/updateNodeRlsVisibility',
+        ),
+
+      updateNodeActions: (nodeId, actions) =>
+        set(
+          (state) => {
+            if (!state.page?.nodeMap[nodeId]) return state;
+            return {
+              isDirty: true,
+              page: {
+                ...state.page,
+                updatedAt: new Date().toISOString(),
+                nodeMap: {
+                  ...state.page.nodeMap,
+                  [nodeId]: {
+                    ...state.page.nodeMap[nodeId]!,
+                    actions,
+                  },
+                },
+              },
+            };
+          },
+          false,
+          'canvas/updateNodeActions',
+        ),
+
+      updatePWAConfig: (config) =>
+        set(
+          (state) => {
+            if (!state.page) return state;
+            const existing = state.page.pwaConfig ?? {
+              enabled: false,
+              appName: state.page.title,
+              shortName: state.page.title.slice(0, 12),
+              description: state.page.description ?? '',
+              themeColor: '#10b77f',
+              backgroundColor: '#0e1511',
+              display: 'standalone' as const,
+              startUrl: '/',
+              orientation: 'any' as const,
+              icon: null,
+              cacheStrategy: {
+                pages: 'network-first' as const,
+                assets: 'cache-first' as const,
+                images: 'cache-first' as const,
+                api: 'network-only' as const,
+              },
+              offlinePage: null,
+            };
+            return {
+              isDirty: true,
+              page: {
+                ...state.page,
+                pwaConfig: { ...existing, ...config },
+                updatedAt: new Date().toISOString(),
+              },
+            };
+          },
+          false,
+          'canvas/updatePWAConfig',
+        ),
+
+      updateSharedPipelines: (pipelines) =>
+        set(
+          (state) => {
+            if (!state.page) return state;
+            return {
+              isDirty: true,
+              page: {
+                ...state.page,
+                sharedPipelines: pipelines,
+                updatedAt: new Date().toISOString(),
+              },
+            };
+          },
+          false,
+          'canvas/updateSharedPipelines',
+        ),
     })),
     { name: 'NexusCanvasStore' },
   ),
@@ -457,4 +628,3 @@ export const selectSaveStatus = (state: CanvasStore): 'saved' | 'saving' | 'dirt
   if (state.isDirty)  return 'dirty';
   return 'saved';
 };
-

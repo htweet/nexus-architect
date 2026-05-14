@@ -1,113 +1,52 @@
 /**
  * App root — wires the DataAdapter and boots the user session.
  *
- * Adapter selection priority:
- *   1. VITE_SANDBOX_MODE=true  → SandboxAdapter (no WP required, full localStorage)
- *   2. window.__NEXUS_CONFIG__ → WordPress mode (WPAdapter)
- *   3. Otherwise               → MockAdapter (dev server / E2E tests)
+ * Adapter selection strategy:
+ *   1. If window.__NEXUS_CONFIG__ exists -> WordPress mode (WPAdapter)
+ *   2. Otherwise -> Mock adapter (dev server / E2E tests)
  *
- * Phase 10 additions:
- *   - SandboxAdapter: zero-install dev mode seeded with a rich demo page
- *   - ObservabilityService: initialized before React renders; PostHog + Sentry
- *     when VITE_POSTHOG_KEY / VITE_SENTRY_DSN are set, NullAdapter otherwise
- *   - migratePageData(): every page loaded from storage is run through the
- *     migration runner to ensure schema version compatibility
+ * This is the ONLY place in the app that knows about WordPress.
+ * Everything below this component is 100% platform-agnostic.
+ *
+ * Phase 6.2: Detects ?nx-preview URL parameter → renders PreviewPage
+ * (clean page view in a new tab, no builder chrome).
+ *
+ * Auto-restore: on dev-mode startup the mock adapter reads localStorage
+ * to find the last edited page and reloads it into the canvas automatically,
+ * so work survives page refreshes without a real WordPress backend.
  */
 
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { Builder }         from '@/components/Builder';
+import { Builder } from '@/components/Builder';
 import { AdapterProvider } from '@/contexts/AdapterContext';
-import { useUserStore, useCanvasStore, ObservabilityService, NullAdapter, migratePageData } from '@nexus/core';
+import { useUserStore, useCanvasStore } from '@nexus/core';
 import type { AdapterContext } from '@nexus/core';
 
-// Lazy-load the preview page — only needed in the new preview tab
+// Lazy-load the preview page — it's only needed in the new preview tab
 const PreviewPage = lazy(() => import('@/pages/PreviewPage'));
 
-// ── localStorage key for last active page ──────────────────────────────────
+// ── localStorage key that the mock adapter writes ─────────────────────────────
 const MOCK_LAST_PAGE_KEY = 'nexus_last_page_id';
 
-// ─── Observability bootstrap ───────────────────────────────────────────────
-//
-// Called once before any React rendering.  When VITE_POSTHOG_KEY or
-// VITE_SENTRY_DSN are set, the real adapters are lazy-loaded and spliced in.
-// Until then (and in development) the NullAdapter is a safe no-op.
-
-ObservabilityService.init(NullAdapter);
-
-(async () => {
-  const sentryDsn    = import.meta.env.VITE_SENTRY_DSN   as string | undefined;
-  const posthogKey   = import.meta.env.VITE_POSTHOG_KEY  as string | undefined;
-  const posthogHost  = import.meta.env.VITE_POSTHOG_HOST as string | undefined;
-
-  let errors    = NullAdapter.errors;
-  let analytics = NullAdapter.analytics;
-
-  if (sentryDsn) {
-    try {
-      const { createSentryAdapter } = await import('@nexus/core');
-      const sentryRelease = import.meta.env.VITE_SENTRY_RELEASE as string | undefined;
-      const s = await createSentryAdapter({
-        dsn:         sentryDsn,
-        environment: import.meta.env.VITE_SENTRY_ENVIRONMENT as string ?? 'production',
-        ...(sentryRelease ? { release: sentryRelease } : {}),
-      });
-      errors = s.errors;
-    } catch (e) {
-      console.warn('[NexusObs] Sentry init failed:', e);
-    }
-  }
-
-  if (posthogKey) {
-    try {
-      const { createPostHogAdapter } = await import('@nexus/core');
-      const p = await createPostHogAdapter({
-        apiKey:   posthogKey,
-        ...(posthogHost ? { host: posthogHost } : {}),
-        disabled: import.meta.env.DEV && !posthogKey,
-      });
-      analytics = p.analytics;
-    } catch (e) {
-      console.warn('[NexusObs] PostHog init failed:', e);
-    }
-  }
-
-  ObservabilityService.init({ errors, analytics });
-})();
-
-// ─── Route detection ───────────────────────────────────────────────────────
+// --- Route detection ---------------------------------------------------------
 
 function isPreviewRoute(): boolean {
-  return new URLSearchParams(window.location.search).has('nx-preview');
+  const params = new URLSearchParams(window.location.search);
+  return params.has('nx-preview');
 }
 
-// ─── Adapter bootstrap ─────────────────────────────────────────────────────
+// --- Adapter bootstrap -------------------------------------------------------
 
 async function resolveAdapter(): Promise<AdapterContext> {
-  // 1. Sandbox mode (VITE_SANDBOX_MODE=true)
-  if (import.meta.env.VITE_SANDBOX_MODE === 'true') {
-    const { SandboxAdapter } = await import('@/lib/sandbox-adapter');
-    ObservabilityService.trackSandboxLoaded();
-    return {
-      data: SandboxAdapter,
-      media: {
-        search:          async () => ({ items: [], total: 0, totalPages: 0, page: 1, perPage: 20 }),
-        openMediaPicker: async () => null,
-      },
-    } as AdapterContext;
-  }
-
-  // 2. WordPress mode
   if (typeof window.__NEXUS_CONFIG__ !== 'undefined') {
     const { createWPAdapterContext } = await import('@nexus/wp-adapter');
     return createWPAdapterContext();
   }
-
-  // 3. Dev / E2E mock
   const { createMockAdapterContext } = await import('@nexus/wp-adapter');
   return createMockAdapterContext();
 }
 
-// ─── User + Page Initializer ───────────────────────────────────────────────
+// --- User + Page Initializer -------------------------------------------------
 
 function UserInitializer({ adapter }: { adapter: AdapterContext }) {
   const setUser    = useUserStore((s) => s.setUser);
@@ -118,38 +57,34 @@ function UserInitializer({ adapter }: { adapter: AdapterContext }) {
     let cancelled = false;
     setLoading(true);
 
+    // Boot user + restore last saved page in parallel
     const userPromise = adapter.data
       .getCurrentUser()
-      .then((user) => {
-        if (!cancelled) {
-          setUser(user);
-          // Identify user in observability
-          ObservabilityService.setUser({ id: user.id, email: user.email, tier: user.tier });
-        }
-      })
+      .then((user) => { if (!cancelled) setUser(user); })
       .catch((err) => {
         console.error('[NexusArchitect] Failed to load current user:', err);
-        ObservabilityService.captureException(err instanceof Error ? err : new Error(String(err)));
         if (!cancelled) {
-          setUser({ id: 'fallback-guest', name: 'Guest', email: '', tier: 'free', siteCount: 0 });
+          setUser({
+            id:        'fallback-guest',
+            name:      'Guest',
+            email:     '',
+            tier:      'free',
+            siteCount: 0,
+          });
         }
       });
 
+    // Auto-restore: load the last active page from the adapter (mock reads
+    // from localStorage; WP adapter reads from the REST API).
     const restorePromise = (async () => {
       try {
         const lastId = localStorage.getItem(MOCK_LAST_PAGE_KEY);
         if (!lastId) return;
-        const raw  = await adapter.data.getPage(lastId);
-        // Phase 10.3: run migrations before loading into the store
-        const { page, migrated, appliedMigrations } = migratePageData(raw);
-        if (migrated) {
-          console.info('[NexusMigration] Page migrated on load:', appliedMigrations);
-          // Re-save migrated page so it's up-to-date in storage
-          adapter.data.updatePage(page.id, page).catch(() => {});
-        }
+        const page = await adapter.data.getPage(lastId);
         if (!cancelled) loadPage(page);
       } catch {
-        // Silently ignore — page may have been deleted or first boot
+        // Silently ignore — page may have been deleted or adapter may not
+        // have the page yet (e.g. first boot). Canvas will remain empty.
       }
     })();
 
@@ -163,9 +98,10 @@ function UserInitializer({ adapter }: { adapter: AdapterContext }) {
   return null;
 }
 
-// ─── App ───────────────────────────────────────────────────────────────────
+// --- App ---------------------------------------------------------------------
 
 export default function App() {
+  // ── Phase 6.2: preview route ─────────────────────────────────────────────
   if (isPreviewRoute()) {
     return (
       <Suspense fallback={null}>
@@ -173,6 +109,8 @@ export default function App() {
       </Suspense>
     );
   }
+
+  // ── Normal builder boot ───────────────────────────────────────────────────
   return <BuilderApp />;
 }
 
@@ -184,13 +122,8 @@ function BuilderApp() {
     resolveAdapter()
       .then(setAdapter)
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Unknown boot error';
         console.error('[NexusArchitect] Adapter boot failed:', err);
-        ObservabilityService.captureException(
-          err instanceof Error ? err : new Error(msg),
-          { extra: { location: 'adapter_boot' } },
-        );
-        setBootError(msg);
+        setBootError(err instanceof Error ? err.message : 'Unknown boot error');
       });
   }, []);
 
@@ -213,8 +146,11 @@ function BuilderApp() {
         data-testid="builder-boot-loading"
       >
         <div className="flex flex-col items-center gap-4">
-          <svg width="48" height="48" viewBox="0 0 26 26" fill="none"
-            xmlns="http://www.w3.org/2000/svg" className="animate-pulse" aria-hidden>
+          <svg
+            width="48" height="48" viewBox="0 0 26 26"
+            fill="none" xmlns="http://www.w3.org/2000/svg"
+            className="animate-pulse" aria-hidden={true}
+          >
             <defs>
               <linearGradient id="boot-logo-grad" x1="0" y1="0" x2="26" y2="26" gradientUnits="userSpaceOnUse">
                 <stop offset="0%"   stopColor="#8B5CF6" />

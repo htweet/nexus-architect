@@ -10,6 +10,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@nexus/core": ["../../packages/core/src/index.ts"],
+      "@nexus/core/plugin-api": ["../../packages/core/src/plugin-api/index.ts"],
       "@nexus/wp-adapter": ["../../packages/wp-adapter/src/index.ts"]
     },
     "noEmit": true

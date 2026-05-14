@@ -11,6 +11,13 @@
  * retrofit cost without it would be a full rewrite.
  */
 
+import type { NexusVariable, NexusBinding } from './dataBind.js';
+import type { ActionPipeline, SharedPipeline } from './action-node.js';
+import type { PWAConfig } from './pwa.js';
+
+// Re-export SharedPipeline so consumers can import from schema
+export type { SharedPipeline } from './action-node.js';
+
 // ─── Breakpoints ────────────────────────────────────────────────────────────
 
 export type Breakpoint = 'base' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
@@ -45,6 +52,19 @@ export interface NodeInteraction {
   hoverStyles?: Record<string, string>;
   onClick?: NodeAction;
   onHover?: NodeAction;
+}
+
+// ─── RLS Visibility Rule ──────────────────────────────────────────────────────
+
+export interface VisibilityRule {
+  roles: string[];
+  condition?: {
+    variableId: string;
+    operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'notContains' | 'isEmpty' | 'notEmpty';
+    value: unknown;
+  };
+  action: 'hide' | 'redirect';
+  redirectTo?: string;
 }
 
 // ─── CRDT Operation Log ──────────────────────────────────────────────────────
@@ -104,6 +124,28 @@ export interface NexusNode {
   /** Optional human-readable label for the Layers panel. */
   label?: string;
 
+  /**
+   * Canvas-local MVC state bindings (Data-Bind system).
+   * Each entry maps a widget prop key to a NexusVariable by ID.
+   * Resolved at render time by resolveStateBindings() in binding-resolver.
+   * Distinct from DynamicDataStore.bindings (WordPress data source bindings).
+   */
+  stateBindings?: NexusBinding[];
+
+  /**
+   * RLS Visibility Rule. Controls role-based access to this node.
+   * In edit mode: dimmed with opacity 0.3 if user's role doesn't match.
+   * In preview/compile mode: node is completely hidden.
+   */
+  rlsVisibility?: VisibilityRule;
+
+  /**
+   * Action pipelines wired to this node.
+   * Each pipeline has a trigger (click, submit, etc.) and ordered steps.
+   * Executed by the ActionEngine at runtime.
+   */
+  actions?: ActionPipeline[];
+
   /** Schema version stamp. Consumed by the migrator in Phase 10. */
   readonly _v: number;
 
@@ -153,6 +195,32 @@ export interface NexusPage {
   customJs?: string;
 
   seoMeta: NexusSeoMeta;
+
+  /**
+   * Canvas-local MVC state variable definitions (Data-Bind system).
+   * Persisted in the page JSON. Runtime values live in useDataBindStore — never here.
+   * Call useDataBindStore.initFromPage(page.variables) after loading a page.
+   */
+  variables: NexusVariable[];
+
+  /**
+   * RLS role configuration for this page.
+   * roleHierarchy is ordered from least to most privileged.
+   */
+  roleConfig?: {
+    authTokenHeader: string;
+    guestRole: string;
+    roleHierarchy: string[];
+  };
+
+  /** PWA configuration for app-like behavior when published. */
+  pwaConfig?: PWAConfig;
+
+  /**
+   * Reusable named pipelines that can be referenced by multiple nodes.
+   * Stored at page level and selected by ID in node.actions via sharedPipelineRef.
+   */
+  sharedPipelines?: SharedPipeline[];
 
   /** Schema version — incremented on every breaking schema change. */
   readonly schemaVersion: number;
@@ -226,6 +294,7 @@ export function createPage(
     customCss: '',
     customJs: '',
     seoMeta: {},
+    variables: [],
     schemaVersion: CURRENT_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
