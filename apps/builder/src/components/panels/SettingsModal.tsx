@@ -40,7 +40,7 @@ export function SettingsModal({ isOpen, onClose, defaultTab = 'license' }: Setti
 
   return (
     <div
-      className="fixed inset-0 z-[9990] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >

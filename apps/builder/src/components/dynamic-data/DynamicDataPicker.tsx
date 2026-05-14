@@ -54,7 +54,7 @@ export function DynamicDataPicker() {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}>
       <div
         className="relative w-full max-w-[480px] rounded-2xl overflow-hidden flex flex-col"

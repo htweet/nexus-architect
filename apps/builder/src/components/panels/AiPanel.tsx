@@ -157,7 +157,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const inputCls = 'w-full px-3 py-2 rounded text-[13px] text-white bg-[#080c16] border border-white/10 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)] outline-none focus:border-[#10b77f] transition-all';
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.60)', backdropFilter: 'blur(6px)' }}>
       <div className="w-full max-w-sm rounded-xl overflow-hidden"
         style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.10)' }}>

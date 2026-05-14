@@ -59,7 +59,7 @@ function UpsellModal({ addon, onClose, onLicenseSuccess, licenseKey, setLicenseK
 
   return (
     <div
-      className="fixed inset-0 z-[9500] flex items-center justify-center"
+      className="fixed inset-0 z-[99999] flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >

@@ -11,8 +11,9 @@
  */
 
 import { useState } from 'react';
-import { Globe, Copy, ExternalLink, CheckCircle2, X, FileCode2, Zap } from 'lucide-react';
+import { Globe, Copy, ExternalLink, CheckCircle2, X, FileCode2, Zap, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useCanvasStore } from '@nexus/core';
 import type { PublishResult } from '@nexus/core';
 
 interface PublishDialogProps {
@@ -33,9 +34,12 @@ function scoreTier(html: string): { label: string; color: string } {
 export function PublishDialog({ isOpen, onClose, result }: PublishDialogProps) {
   const [copied,       setCopied]       = useState(false);
   const [copiedSource, setCopiedSource] = useState(false);
+  const pwaEnabled = useCanvasStore((s) => s.page?.pwaConfig?.enabled ?? false);
 
   if (!isOpen || !result) return null;
 
+  const pageUrl = result.pageUrl;
+  const isHttp  = pageUrl.startsWith('http:');
   const sizeKb    = result.staticHtml
     ? (new TextEncoder().encode(result.staticHtml).byteLength / 1024).toFixed(1)
     : null;
@@ -64,7 +68,7 @@ export function PublishDialog({ isOpen, onClose, result }: PublishDialogProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center"
+      className="fixed inset-0 z-[99999] flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
       onClick={onClose}
     >
@@ -152,6 +156,24 @@ export function PublishDialog({ isOpen, onClose, result }: PublishDialogProps) {
                 {score.label}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* ── PWA badge (Task 147) ─────────────────────────────────────── */}
+        {pwaEnabled && (
+          <div
+            className="flex items-center gap-2 px-4 py-2.5 border-b"
+            style={{ borderColor: 'rgba(255,255,255,0.10)', background: '#09100c' }}
+          >
+            <Smartphone size={12} style={{ color: '#10b77f' }} />
+            <span className="text-[11px]" style={{ color: '#10b77f' }}>
+              PWA manifest &amp; service worker will be generated
+            </span>
+            {isHttp && (
+              <span className="ml-auto text-[10px] font-bold" style={{ color: '#fbbf24' }}>
+                ⚠ HTTPS required
+              </span>
+            )}
           </div>
         )}
 

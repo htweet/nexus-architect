@@ -415,7 +415,7 @@ export function TemplatesModal({ isOpen, onClose }: TemplatesModalProps) {
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-[200] flex items-start justify-center"
+      className="fixed inset-0 z-[99999] flex items-start justify-center"
       style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }}
       onMouseDown={(e) => { if (e.target === backdropRef.current) onClose(); }}
     >
