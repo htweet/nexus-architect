@@ -1,10 +1,8 @@
 /**
  * LeftPanel — Nexus Architect left sidebar.
- * Width: 264px. Tabs: Layers | Widgets | AI | Marketplace
+ * Width: 264px. Tabs: Layers | Widgets | AI | Marketplace | Data
  *
- * Phase M: Added Marketplace tab + useWidgetRegistryVersion for reactive
- * palette — when an addon registers/unregisters widgets the palette
- * re-renders automatically without any extra store plumbing.
+ * VAE Task 144: Added 'data-bind' tab (Database icon) for VariableEditorPanel.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -14,7 +12,7 @@ import {
   FileText, Plus, AlignLeft,
   Square, Minus as MinusIcon, Image, Type, MousePointer2,
   LayoutGrid, Columns, Frame, List, Loader2, Heading1,
-  Star, Zap, Component, Sparkles, LogIn, Store,
+  Star, Zap, Component, Sparkles, LogIn, Store, Database,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
@@ -25,9 +23,10 @@ import { getWidget, getAllWidgets } from '@/widgets/registry';
 import { AiPanel } from '@/components/panels/AiPanel';
 import { LayersTree } from '@/components/layers/LayersTree';
 import { MarketplacePanel } from '@/components/panels/MarketplacePanel';
+import { VariableEditorPanel } from '@/components/panels/VariableEditorPanel';
 import { useWidgetRegistryVersion } from '@/hooks/useWidgetRegistryVersion';
 
-type PanelTab = 'layers' | 'widgets' | 'ai' | 'marketplace';
+type PanelTab = 'layers' | 'widgets' | 'ai' | 'marketplace' | 'data-bind';
 
 const STATIC_PALETTE_GROUPS = [
   {
@@ -73,7 +72,6 @@ const STATIC_PALETTE_GROUPS = [
 
 /** Build the full palette groups, merging in any dynamically-registered addon widgets. */
 function buildPaletteGroups(registryVersion: number) {
-  // registryVersion is consumed so useMemo re-runs when the registry changes
   void registryVersion;
 
   const allWidgets = getAllWidgets();
@@ -81,7 +79,6 @@ function buildPaletteGroups(registryVersion: number) {
     STATIC_PALETTE_GROUPS.flatMap((g) => g.items.map((i) => i.type)),
   );
 
-  // Collect addon-registered widgets not already in the static palette
   const addonItems = allWidgets
     .filter((w) => !staticTypes.has(w.type))
     .map((w) => ({
@@ -265,13 +262,15 @@ export function LeftPanel() {
     activeLeftTab === 'widgets'     ? 'widgets'     :
     activeLeftTab === 'ai'          ? 'ai'          :
     activeLeftTab === 'marketplace' ? 'marketplace' :
+    activeLeftTab === 'data-bind'   ? 'data-bind'   :
     'layers';
 
   const TABS: { id: PanelTab; label: string; icon?: React.ReactNode }[] = [
     { id: 'layers',      label: 'Layers'  },
     { id: 'widgets',     label: 'Widgets' },
     { id: 'ai',          label: 'AI'      },
-    { id: 'marketplace', label: 'Store', icon: <Store size={11} strokeWidth={1.5} /> },
+    { id: 'marketplace', label: 'Store',  icon: <Store size={11} strokeWidth={1.5} /> },
+    { id: 'data-bind',   label: 'Data',   icon: <Database size={11} strokeWidth={1.5} /> },
   ];
 
   return (
@@ -285,7 +284,7 @@ export function LeftPanel() {
           <button
             key={t.id}
             onClick={() => setLeftTab(t.id as Parameters<typeof setLeftTab>[0])}
-            className="flex-1 h-10 text-[12px] font-medium transition-colors duration-[120ms]"
+            className="flex-1 h-10 text-[11px] font-medium transition-colors duration-[120ms]"
             style={{
               color:        tab === t.id ? '#50dea3' : '#bbcabf',
               borderBottom: tab === t.id ? '2px solid #10b77f' : '2px solid transparent',
@@ -312,6 +311,21 @@ export function LeftPanel() {
       {tab === 'marketplace' && (
         <div className="flex-1 overflow-hidden" data-testid="marketplace-tab-content">
           <MarketplacePanel />
+        </div>
+      )}
+
+      {/* Data-Bind tab */}
+      {tab === 'data-bind' && (
+        <div className="flex-1 overflow-hidden">
+          {page ? (
+            <VariableEditorPanel />
+          ) : (
+            <div className="flex items-center justify-center h-full px-4 text-center">
+              <p className="text-[11px]" style={{ color: '#4a5f4e' }}>
+                Load a page to manage variables.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

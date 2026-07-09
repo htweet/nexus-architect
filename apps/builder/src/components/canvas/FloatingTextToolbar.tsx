@@ -263,7 +263,7 @@ export function FloatingTextToolbar({ containerRef }: FloatingTextToolbarProps) 
           height: TOOLBAR_HEIGHT,
           background: '#0e1511',
           border: '1px solid rgba(255,255,255,0.10)',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
           backdropFilter: 'blur(8px)',
           whiteSpace: 'nowrap',
         }}

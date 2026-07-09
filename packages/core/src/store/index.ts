@@ -10,3 +10,5 @@ export * from './whitelabel.store.js';
 export * from './dynamic-data.store.js';
 export * from './addon.store.js';
 export * from './cloud-sync.store.js';
+// VAE: Data-Bind MVC state system
+export * from './dataBind.store.js';

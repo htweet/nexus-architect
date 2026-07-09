@@ -4,11 +4,12 @@
  * Height: 52px
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Undo2, Redo2, Monitor, Tablet, Smartphone,
   ChevronDown, Plus, Trash2, Copy, Loader2, ExternalLink, Check,
-  LayoutTemplate, PanelLeft, PanelRight, Settings,
+  LayoutTemplate, PanelLeft, PanelRight, Settings, CheckCircle2, Zap,
+  HelpCircle, Keyboard, Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
@@ -21,7 +22,12 @@ import { PublishDialog } from '@/components/panels/PublishDialog';
 import { TemplatesModal } from '@/components/panels/TemplatesModal';
 import { SettingsModal } from '@/components/panels/SettingsModal';
 import { PREVIEW_STORAGE_KEY } from '@/lib/preview-constants';
+import { generatePublishPayload, mockPublish } from '@/lib/serialization-engine';
 import type { PublishResult } from '@nexus/core';
+import { obs } from '@nexus/core';
+
+// ── Publish state machine ────────────────────────────────────────────────────
+type PublishPhase = 'idle' | 'compiling' | 'live';
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
 function NexusLogoMark() {
@@ -151,7 +157,7 @@ function PageTab() {
           style={{
             background: '#161d19',
             border: '1px solid rgba(255,255,255,0.10)',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
           }}
         >
           {loading ? (
@@ -240,8 +246,95 @@ const BREAKPOINTS: { key: ActiveBreakpoint; icon: React.ReactNode; label: string
   { key: 'mobile',  icon: <Smartphone size={14} />, label: 'Mobile (M)'  },
 ];
 
+// ── Preview As role dropdown ─────────────────────────────────────────────────
+function PreviewAsDropdown() {
+  const roleHierarchy = useCanvasStore((s) => s.page?.roleConfig?.roleHierarchy ?? []);
+  const previewRole   = useUIStore((s) => s.previewRole);
+  const setPreviewRole = useUIStore((s) => s.setPreviewRole);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  if (roleHierarchy.length === 0) return null;
+
+  const isActive = previewRole !== null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="Preview as role"
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] transition-colors duration-150"
+        style={{
+          color: isActive ? '#10b77f' : '#bbcabf',
+          background: isActive ? 'rgba(16,183,127,0.10)' : 'transparent',
+          border: isActive ? '1px solid rgba(16,183,127,0.30)' : '1px solid transparent',
+        }}
+        onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+        onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <Eye size={13} strokeWidth={1.5} />
+        {isActive ? previewRole : 'Role'}
+        <ChevronDown size={10} className={cn('transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full right-0 mt-1 z-50 rounded-lg overflow-hidden py-1 min-w-[160px]"
+          style={{
+            background: '#121821',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
+            fontSize: 11,
+          }}
+        >
+          <div
+            onClick={() => { setPreviewRole(null); setOpen(false); }}
+            className="flex items-center px-3 py-1.5 cursor-pointer"
+            style={{
+              color: previewRole === null ? '#50dea3' : '#dde4dd',
+              background: previewRole === null ? 'rgba(16,183,127,0.12)' : 'transparent',
+            }}
+            onMouseEnter={(e) => { if (previewRole !== null) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'; }}
+            onMouseLeave={(e) => { if (previewRole !== null) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+          >
+            None (Real User)
+          </div>
+          {roleHierarchy.map((role) => (
+            <div
+              key={role}
+              onClick={() => { setPreviewRole(role); setOpen(false); }}
+              className="flex items-center px-3 py-1.5 cursor-pointer"
+              style={{
+                color: previewRole === role ? '#50dea3' : '#dde4dd',
+                background: previewRole === role ? 'rgba(16,183,127,0.12)' : 'transparent',
+              }}
+              onMouseEnter={(e) => { if (previewRole !== role) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'; }}
+              onMouseLeave={(e) => { if (previewRole !== role) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            >
+              {role}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── TopBar ────────────────────────────────────────────────────────────────────
-export function TopBar() {
+interface TopBarProps {
+  onHelpOpen?:      () => void;
+  onShortcutsOpen?: () => void;
+}
+
+export function TopBar({ onHelpOpen, onShortcutsOpen }: TopBarProps = {}) {
   const activeBreakpoint  = useUIStore((s) => s.activeBreakpoint);
   const setBreakpoint     = useUIStore((s) => s.setBreakpoint);
   const isPreviewMode     = useUIStore((s) => s.isPreviewMode);
@@ -261,6 +354,11 @@ export function TopBar() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [previewing,    setPreviewing]    = useState(false);
   const [settingsOpen,  setSettingsOpen]  = useState(false);
+
+  // New publish state machine
+  const [publishPhase,    setPublishPhase]    = useState<PublishPhase>('idle');
+  const [publishProgress, setPublishProgress] = useState(0);
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleUndo = () => {
     const currentPage = useCanvasStore.getState().page ?? undefined;
@@ -287,14 +385,46 @@ export function TopBar() {
     }
   };
 
-  const handlePublish = async () => {
-    if (!page) return;
+  const handlePublish = useCallback(async () => {
+    if (!page || publishPhase !== 'idle') return;
+
+    const publishStart = Date.now();
+    obs.trackPublishStarted(page.id);
+
+    // --- Phase 1: Compiling ---
+    setPublishPhase('compiling');
+    setPublishProgress(0);
+
     try {
-      const result = await adapter.data.publishPage(page.id);
-      setPublishResult(result);
-      setPublishOpen(true);
-    } catch { /* surfaced via dialog */ }
-  };
+      // Build payload (synchronous compile + mock async POST)
+      const payload = generatePublishPayload(page);
+
+      await mockPublish(payload, (pct) => setPublishProgress(pct));
+
+      // --- Phase 2: Live badge ---
+      setPublishPhase('live');
+      setPublishProgress(100);
+      obs.trackPublishCompleted(page.id, Date.now() - publishStart);
+
+      // Also fire the legacy WP adapter publish so DB record is updated
+      try {
+        const result = await adapter.data.publishPage(page.id);
+        setPublishResult(result);
+      } catch { /* non-fatal */ }
+
+      // Reset to idle after 3 seconds
+      if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = setTimeout(() => {
+        setPublishPhase('idle');
+        setPublishProgress(0);
+      }, 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown publish error';
+      obs.trackPublishFailed(page.id, message);
+      setPublishPhase('idle');
+      setPublishProgress(0);
+    }
+  }, [page, publishPhase, adapter]);
 
   return (
     <header
@@ -376,7 +506,36 @@ export function TopBar() {
           ))}
         </div>
 
+        <PreviewAsDropdown />
         <CollabAvatars />
+
+        {/* Shortcuts button */}
+        {onShortcutsOpen && (
+          <button
+            onClick={onShortcutsOpen}
+            title="Keyboard shortcuts (?)"
+            className="flex items-center justify-center w-8 h-8 rounded-md transition-colors duration-150"
+            style={{ color: '#bbcabf' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#dde4dd'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#bbcabf'; }}
+          >
+            <Keyboard size={15} />
+          </button>
+        )}
+
+        {/* Help button */}
+        {onHelpOpen && (
+          <button
+            onClick={onHelpOpen}
+            title="Help & resources (H)"
+            className="flex items-center justify-center w-8 h-8 rounded-md transition-colors duration-150"
+            style={{ color: '#bbcabf' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#dde4dd'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#bbcabf'; }}
+          >
+            <HelpCircle size={15} />
+          </button>
+        )}
 
         {/* Settings button */}
         <button
@@ -408,24 +567,72 @@ export function TopBar() {
           {isPreviewMode ? 'Exit' : 'Preview'}
         </button>
 
-        {/* Publish button */}
-        <button
-          onClick={() => void handlePublish()}
-          disabled={!page}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] font-semibold transition-all disabled:opacity-40"
-          style={{ background: '#10b77f', color: '#ffffff' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#0da870'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#10b77f'; }}
-          title="Publish page"
-        >
-          Publish
-        </button>
+        {/* Publish button — state machine: idle | compiling | live */}
+        <div className="relative flex flex-col items-stretch" style={{ minWidth: 88 }}>
+          <button
+            onClick={() => void handlePublish()}
+            disabled={!page || publishPhase === 'compiling'}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] font-semibold transition-all disabled:opacity-60 overflow-hidden"
+            style={{
+              background: publishPhase === 'live' ? '#0b8f5e' : '#10b77f',
+              color: '#ffffff',
+              minWidth: 88,
+              position: 'relative',
+            }}
+            onMouseEnter={(e) => {
+              if (publishPhase === 'idle') e.currentTarget.style.background = '#0da870';
+            }}
+            onMouseLeave={(e) => {
+              if (publishPhase === 'idle') e.currentTarget.style.background = '#10b77f';
+              if (publishPhase === 'live') e.currentTarget.style.background = '#0b8f5e';
+            }}
+            title={
+              publishPhase === 'compiling' ? 'Compiling...' :
+              publishPhase === 'live'      ? 'Published!' :
+              'Publish page'
+            }
+          >
+            {/* Progress bar overlay (compiling phase) */}
+            {publishPhase === 'compiling' && (
+              <span
+                className="absolute inset-0 origin-left transition-transform duration-200"
+                style={{
+                  background: 'rgba(0,0,0,0.18)',
+                  transform: `scaleX(${1 - publishProgress / 100})`,
+                  transformOrigin: 'right',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+
+            {/* Button content */}
+            <span className="relative flex items-center gap-1.5 z-10">
+              {publishPhase === 'compiling' && (
+                <Loader2 size={13} className="animate-spin" />
+              )}
+              {publishPhase === 'live' && (
+                <CheckCircle2 size={13} />
+              )}
+              {publishPhase === 'idle' && (
+                <Zap size={13} strokeWidth={1.5} />
+              )}
+              <span>
+                {publishPhase === 'compiling'
+                  ? `${publishProgress}%`
+                  : publishPhase === 'live'
+                    ? 'Live'
+                    : 'Publish'}
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Dialogs */}
       <PublishDialog
         isOpen={publishOpen && publishResult !== null}
         result={publishResult}
+    
         onClose={() => { setPublishOpen(false); setPublishResult(null); }}
       />
       <TemplatesModal

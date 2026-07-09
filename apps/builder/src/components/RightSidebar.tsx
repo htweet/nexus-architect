@@ -109,6 +109,14 @@ function SectionHeader({
   );
 }
 
+// ─── Color hex helper ─────────────────────────────────────────────────────────
+// Strips stray leading `#` from user input and returns a valid CSS color string.
+// Empty input → '' (clears the property). Non-empty → '#rrggbb'.
+function applyHex(raw: string): string {
+  const stripped = raw.replace(/^#+/, '');
+  return stripped ? `#${stripped}` : '';
+}
+
 // ─── Shared input-cell style ──────────────────────────────────────────────────
 const cellStyle: React.CSSProperties = {
   display: 'flex',
@@ -234,8 +242,23 @@ function LayoutSection({ nodeId }: { nodeId: string }) {
   const s       = (node?.styles?.[bpKey] ?? {}) as Record<string, string>;
   const set     = (k: string) => (v: string) => update(nodeId, { [bpKey]: { [k]: v } });
   const display = s.display ?? 'block';
-  const isFlex  = display === 'flex';
+  const isFlex  = display === 'flex' || display === 'inline-flex';
   const isGrid  = display === 'grid';
+
+  // When switching display mode, purge props that only apply to the OLD mode
+  // to avoid stale flex/grid values polluting block/inline layouts.
+  const handleDisplayChange = (newDisplay: string) => {
+    const FLEX_PROPS = ['flexDirection', 'alignItems', 'justifyContent', 'flexWrap'] as const;
+    const GRID_PROPS = ['gridTemplateColumns'] as const;
+    const clear: Record<string, string> = {};
+    if (newDisplay !== 'flex' && newDisplay !== 'inline-flex') {
+      FLEX_PROPS.forEach((p) => { clear[p] = ''; });
+    }
+    if (newDisplay !== 'grid') {
+      GRID_PROPS.forEach((p) => { clear[p] = ''; });
+    }
+    update(nodeId, { [bpKey]: { display: newDisplay, ...clear } });
+  };
 
   const ALIGN_H = [
     { icon: <AlignLeft size={11} />,    value: 'flex-start',   label: 'Start'        },
@@ -277,11 +300,11 @@ function LayoutSection({ nodeId }: { nodeId: string }) {
             <span className="text-[11px] flex-shrink-0 w-14" style={{ color: '#bbcabf' }}>Display</span>
             <select
               value={display}
-              onChange={(e) => set('display')(e.target.value)}
+              onChange={(e) => handleDisplayChange(e.target.value)}
               style={selectStyle}
               aria-label="Display"
             >
-              {['block','flex','grid','inline-block','inline-flex','none'].map((d) => (
+              {['block','flex','inline-flex','grid','inline-block','none'].map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
@@ -390,8 +413,21 @@ function TypographySection({ nodeId }: { nodeId: string }) {
   const s   = (node?.styles?.[bpKey] ?? {}) as Record<string, string>;
   const set = (k: string) => (v: string) => updateS(nodeId, { [bpKey]: { [k]: v } });
 
-  const FONTS   = ['Inter','Roboto','Open Sans','Lato','Montserrat','Poppins',
-                   'Raleway','Nunito','Source Sans Pro','Playfair Display'];
+  // Keys = display label, values = full CSS font-family stack
+  const FONT_FAMILIES: Record<string, string> = {
+    'Inter':            'Inter, sans-serif',
+    'Roboto':           'Roboto, sans-serif',
+    'Open Sans':        '"Open Sans", sans-serif',
+    'Lato':             'Lato, sans-serif',
+    'Montserrat':       'Montserrat, sans-serif',
+    'Poppins':          'Poppins, sans-serif',
+    'Raleway':          'Raleway, sans-serif',
+    'Nunito':           'Nunito, sans-serif',
+    'Source Sans Pro':  '"Source Sans Pro", sans-serif',
+    'Playfair Display': '"Playfair Display", serif',
+    'Georgia':          'Georgia, serif',
+    'System UI':        'system-ui, sans-serif',
+  };
   const WEIGHTS = [
     { v:'100', l:'Thin'       }, { v:'200', l:'ExtraLight' }, { v:'300', l:'Light'   },
     { v:'400', l:'Regular'    }, { v:'500', l:'Medium'     }, { v:'600', l:'SemiBold'},
@@ -427,12 +463,14 @@ function TypographySection({ nodeId }: { nodeId: string }) {
         <div className="px-3 pb-2 flex flex-col gap-1">
           {/* Font family */}
           <select
-            value={s.fontFamily ?? 'Inter'}
+            value={s.fontFamily ?? 'Inter, sans-serif'}
             onChange={(e) => set('fontFamily')(e.target.value)}
             style={{ ...selectStyle, width: '100%' }}
             aria-label="Font family"
           >
-            {FONTS.map((f) => <option key={f}>{f}</option>)}
+            {Object.entries(FONT_FAMILIES).map(([label, value]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
 
           {/* Weight + Size */}
@@ -483,15 +521,15 @@ function TypographySection({ nodeId }: { nodeId: string }) {
           <div style={cellStyle}>
             <input
               type="color"
-              value={color.startsWith('#') ? color : '#000000'}
+              value={color.startsWith('#') ? color : '#333333'}
               onChange={(e) => set('color')(e.target.value)}
               className="w-4 h-4 rounded-sm flex-shrink-0 cursor-pointer border-0 p-0 bg-transparent"
               style={{ appearance: 'none' }}
               aria-label="Text color"
             />
             <IInput
-              value={color.replace('#', '')}
-              onChange={(v) => set('color')(`#${v}`)}
+              value={color.replace(/^#+/, '')}
+              onChange={(v) => set('color')(applyHex(v))}
               label="Text color hex"
               placeholder="333333"
               className="flex-1"
@@ -505,16 +543,17 @@ function TypographySection({ nodeId }: { nodeId: string }) {
 
 // ─── 5. Background ────────────────────────────────────────────────────────────
 function BackgroundSection({ nodeId }: { nodeId: string }) {
-  const [open, setOpen]       = useState(true);
-  const [visible, setVisible] = useState(true);
+  const [open, setOpen] = useState(true);
   const node   = useCanvasStore((s) => s.page?.nodeMap?.[nodeId]);
   const update = useCanvasStore((s) => s.updateNodeStyles);
   const bpKey  = useBpKey();
 
-  const s       = (node?.styles?.[bpKey] ?? {}) as Record<string, string>;
-  const fill    = s.backgroundColor ?? '';
-  const opacity = s.opacity ?? '';
-  const set     = (k: string) => (v: string) => update(nodeId, { [bpKey]: { [k]: v } });
+  const s         = (node?.styles?.[bpKey] ?? {}) as Record<string, string>;
+  const fill      = s.backgroundColor ?? '';
+  const opacity   = s.opacity ?? '';
+  // Derive visibility from persisted CSS — defaults to visible when unset
+  const isVisible = s.visibility !== 'hidden';
+  const set       = (k: string) => (v: string) => update(nodeId, { [bpKey]: { [k]: v } });
 
   return (
     <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -533,21 +572,22 @@ function BackgroundSection({ nodeId }: { nodeId: string }) {
                 aria-label="Background color"
               />
               <IInput
-                value={fill.replace('#', '').toUpperCase()}
-                onChange={(v) => set('backgroundColor')(`#${v}`)}
+                value={fill.replace(/^#+/, '').toUpperCase()}
+                onChange={(v) => set('backgroundColor')(applyHex(v))}
                 label="Background hex"
                 placeholder="transparent"
                 className="flex-1"
               />
             </div>
             <button
-              onClick={() => setVisible((v) => !v)}
-              style={{ color: '#bbcabf' }}
-              title={visible ? 'Hide' : 'Show'}
+              onClick={() => set('visibility')(isVisible ? 'hidden' : 'visible')}
+              style={{ color: isVisible ? '#bbcabf' : '#f87171' }}
+              title={isVisible ? 'Hide element' : 'Show element'}
+              aria-label={isVisible ? 'Hide element' : 'Show element'}
               onMouseEnter={(e) => (e.currentTarget.style.color = '#dde4dd')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#bbcabf')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = isVisible ? '#bbcabf' : '#f87171')}
             >
-              {visible ? <Eye size={13} /> : <EyeOff size={13} />}
+              {isVisible ? <Eye size={13} /> : <EyeOff size={13} />}
             </button>
           </div>
 
@@ -603,7 +643,7 @@ function BorderSection({ nodeId }: { nodeId: string }) {
                 style={{ appearance: 'none' }}
                 aria-label="Border color"
               />
-              <IInput value={color.replace('#', '').toUpperCase()} onChange={(v) => set('borderColor')(`#${v}`)} label="Border color" placeholder="000000" className="flex-1" />
+              <IInput value={color.replace(/^#+/, '').toUpperCase()} onChange={(v) => set('borderColor')(applyHex(v))} label="Border color" placeholder="000000" className="flex-1" />
             </div>
             <div style={cellStyle}>
               <span className="text-[10px] flex-shrink-0" style={{ color: '#bbcabf' }}>W</span>
@@ -779,7 +819,7 @@ export function RightSidebar() {
         ))}
       </div>
 
-      {/* ── Breakpoint indicator ──────────────────────────────────────────── */}
+      {/* -- Breakpoint indicator -- */}
       <div
         className="flex items-center gap-1.5 px-3 py-1.5 shrink-0"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}

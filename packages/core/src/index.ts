@@ -20,3 +20,9 @@ export * from './observability/index.js';
 
 // ─── Plugin API (addon authoring contract) ───────────────────────────────────
 export * from './plugin-api/index.js';
+
+// ─── VAE: Data-Bind binding resolver (pure, framework-agnostic) ──────────────
+export * from './lib/binding-resolver.js';
+
+// ─── VAE: Action Engine (task 146) ───────────────────────────────────────────
+export * from './lib/action-engine.js';

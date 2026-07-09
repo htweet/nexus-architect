@@ -1,7 +1,8 @@
 /**
  * UIStore — Pure UI state. Zero business logic.
  *
- * Covers: active breakpoint, panel visibility, zoom level, preview mode.
+ * Covers: active breakpoint, panel visibility, zoom level, preview mode,
+ *         preview role (RLS simulation), open modal nodes (Action Engine).
  * Nothing in this store touches the page data — that lives in CanvasStore.
  */
 
@@ -11,7 +12,7 @@ import { devtools, persist } from 'zustand/middleware';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ActiveBreakpoint = 'desktop' | 'tablet' | 'mobile';
-export type LeftPanelTab = 'widgets' | 'layers' | 'templates' | 'ai' | 'marketplace';
+export type LeftPanelTab = 'widgets' | 'layers' | 'templates' | 'ai' | 'marketplace' | 'data-bind';
 
 export const BREAKPOINT_CANVAS_WIDTHS: Record<ActiveBreakpoint, number | null> = {
   desktop: null,
@@ -31,6 +32,10 @@ interface UIState {
   isPublishing: boolean;
   showUpgradeModal: boolean;
   upgradeModalFeature: string | null;
+  /** RLS preview role — session-only, not persisted. */
+  previewRole: string | null;
+  /** Set of node IDs currently showing as open modals (Action Engine). */
+  openModalNodes: Set<string>;
 }
 
 interface UIActions {
@@ -49,6 +54,10 @@ interface UIActions {
   setPublishing: (val: boolean) => void;
   openUpgradeModal: (feature: string) => void;
   closeUpgradeModal: () => void;
+  /** Set the RLS preview role (session-only). */
+  setPreviewRole: (role: string | null) => void;
+  /** Toggle a modal node open/close/toggle (Action Engine). */
+  toggleModalNode: (nodeId: string, action: 'open' | 'close' | 'toggle') => void;
 }
 
 export type UIStore = UIState & UIActions;
@@ -71,6 +80,8 @@ export const useUIStore = create<UIStore>()(
         isPublishing: false,
         showUpgradeModal: false,
         upgradeModalFeature: null,
+        previewRole: null,
+        openModalNodes: new Set<string>(),
 
         setBreakpoint: (bp) => set({ activeBreakpoint: bp }, false, 'ui/setBreakpoint'),
 
@@ -130,6 +141,22 @@ export const useUIStore = create<UIStore>()(
             false,
             'ui/closeUpgradeModal',
           ),
+
+        setPreviewRole: (role) => set({ previewRole: role }, false, 'ui/setPreviewRole'),
+
+        toggleModalNode: (nodeId, action) =>
+          set(
+            (s) => {
+              const next = new Set(s.openModalNodes);
+              if (action === 'open')   next.add(nodeId);
+              else if (action === 'close') next.delete(nodeId);
+              else if (next.has(nodeId)) next.delete(nodeId);
+              else next.add(nodeId);
+              return { openModalNodes: next };
+            },
+            false,
+            'ui/toggleModalNode',
+          ),
       }),
       {
         name: 'nexus-ui-preferences',
@@ -139,6 +166,7 @@ export const useUIStore = create<UIStore>()(
           leftPanelOpen: state.leftPanelOpen,
           rightPanelOpen: state.rightPanelOpen,
           zoomLevel: state.zoomLevel,
+          // previewRole and openModalNodes are intentionally NOT persisted
         }),
       },
     ),

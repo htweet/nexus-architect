@@ -5,11 +5,13 @@
  *   • Double-click enters edit mode
  *   • FloatingTextToolbar on text selection (bold, italic, underline, links, alignment)
  *   • Stores both props.text (plain) and props.html (rich)
+ *
+ * VAE Task 143: uses useNodeProps for data-bind resolution.
  */
 
 import { memo, useRef, useCallback, useEffect } from 'react';
 import { AlignLeft } from 'lucide-react';
-import { useCanvasStore, useSelectionStore } from '@nexus/core';
+import { useCanvasStore, useSelectionStore, useNodeProps } from '@nexus/core';
 import { InspectorInput, InspectorSection, getVisualNodeStyles } from './shared';
 import { FloatingTextToolbar } from '@/components/canvas/FloatingTextToolbar';
 import { pushHistory } from '@/lib/history';
@@ -45,9 +47,11 @@ const ParagraphRenderer = memo(function ParagraphRenderer({ nodeId, isPreview }:
   const ref          = useRef<HTMLParagraphElement>(null);
   const isEditing    = editingNodeId === nodeId && !isPreview;
 
-  if (!node) return null;
+  // VAE: resolved props with data-bind support
+  const resolvedProps = useNodeProps(nodeId);
+  const p = { ...DEFAULTS, ...(resolvedProps as Partial<ParagraphProps>) };
 
-  const p = { ...DEFAULTS, ...(node.props as Partial<ParagraphProps>) };
+  if (!node) return null;
 
   const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
@@ -158,6 +162,6 @@ export const ParagraphWidget: WidgetDefinition = {
   category:     'content',
   defaultProps: DEFAULTS as unknown as Record<string, unknown>,
   keywords:     ['text', 'paragraph', 'body', 'copy', 'prose'],
-    Renderer:     ParagraphRenderer,
+  Renderer:     ParagraphRenderer,
   Inspector:    ParagraphInspector,
 };

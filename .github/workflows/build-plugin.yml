@@ -1,0 +1,103 @@
+name: Build & Package Plugin
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'     # e.g. v1.0.0
+  workflow_dispatch:  # Allow manual triggers from GitHub UI
+    inputs:
+      version:
+        description: 'Version string (e.g. 1.0.0) — leave blank to use tag'
+        required: false
+
+permissions:
+  contents: write  # needed to create GitHub Releases
+
+jobs:
+  build:
+    name: Build React app & create distributable ZIP
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Node + npm ───────────────────────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Install dependencies ─────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 4. TypeScript check ─────────────────────────────────────────────────
+      - name: TypeScript — 0 errors
+        run: npx tsc --noEmit -p apps/builder/tsconfig.json
+
+      # ── 5. Build React app ──────────────────────────────────────────────────
+      - name: Build Vite bundle
+        run: npm run build --workspace=apps/builder
+        env:
+          NODE_ENV: production
+
+      # ── 6. Resolve version string ───────────────────────────────────────────
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            V="${{ github.event.inputs.version }}"
+            echo "VERSION=${V:-0.0.0-dev}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 7. Package plugin ZIP ────────────────────────────────────────────────
+      - name: Package plugin
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          PLUGIN_DIR="nexus-architect"
+          ZIP_NAME="nexus-architect-${VERSION}.zip"
+
+          mkdir -p "$PLUGIN_DIR/apps/builder"
+          mkdir -p "$PLUGIN_DIR/includes"
+
+          # PHP plugin files
+          cp nexus-architect.php "$PLUGIN_DIR/"
+          cp readme.txt          "$PLUGIN_DIR/"
+          cp -r includes/        "$PLUGIN_DIR/includes/"
+
+          # Compiled React bundle (dist only — no source)
+          cp -r apps/builder/dist/ "$PLUGIN_DIR/apps/builder/dist/"
+
+          # Optional: API docs shipped with the plugin
+          if [ -d docs/api ]; then
+            mkdir -p "$PLUGIN_DIR/docs"
+            cp -r docs/api/ "$PLUGIN_DIR/docs/api/"
+          fi
+
+          # Create distributable ZIP
+          mkdir -p dist
+          zip -r "dist/${ZIP_NAME}" "$PLUGIN_DIR/"
+          echo "Created dist/${ZIP_NAME}"
+          ls -lh "dist/${ZIP_NAME}"
+
+      # ── 8. Upload build artifact ─────────────────────────────────────────────
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-architect-${{ steps.version.outputs.VERSION }}
+          path: dist/nexus-architect-*.zip
+          retention-days: 30
+
+      # ── 9. Create GitHub Release (tag pushes only) ───────────────────────────
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/nexus-architect-*.zip
+          generate_release_notes: true
+          tag_name: ${{ github.ref_name }}

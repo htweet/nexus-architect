@@ -33,7 +33,8 @@ import { TopBar }     from '@/components/TopBar';
 import { LeftPanel }  from '@/components/LeftPanel';
 import { RightPanel }   from '@/components/RightPanel';
 import { Canvas }     from '@/components/Canvas';
-import { SmartGuidesOverlay } from '@/components/canvas/SmartGuidesOverlay';
+import { SmartGuidesOverlay }  from '@/components/canvas/SmartGuidesOverlay';
+import { StableNodeOverlay }   from '@/components/canvas/StableNodeOverlay';
 import {
   useUIStore, useUserStore, useCanvasStore, useSelectionStore,
   useHistoryStore,
@@ -47,6 +48,10 @@ import { useAutoSave }   from '@/hooks/useAutoSave';
 import { usePresence }   from '@/hooks/usePresence';
 import { SaveErrorToast } from '@/components/ui/SaveErrorToast';
 import { DynamicDataPicker } from '@/components/dynamic-data/DynamicDataPicker';
+import { obs } from '@nexus/core';
+import { WelcomeWizard } from '@/components/WelcomeWizard';
+import { ShortcutsModal } from '@/components/ShortcutsModal';
+import { HelpPanel }      from '@/components/HelpPanel';
 
 // ─── Keyboard Shortcuts ───────────────────────────────────────────────────────
 
@@ -130,7 +135,21 @@ function useBuilderShortcuts() {
 
 // ─── DnD helpers ─────────────────────────────────────────────────────────────
 
-const CONTAINER_TYPES = new Set(['root', 'container', 'section']);
+/**
+ * Widget types that are active drop zones.
+ * Add new container widgets here when they're registered so the DnD
+ * resolver can move children into them instead of alongside them.
+ */
+const CONTAINER_TYPES = new Set([
+  'root', 'section', 'container',
+  'columns',       // multi-column layout — each column cell is also a container
+  'tabs',          // tab strip — tab-panels are children
+  'accordion',     // accordion — accordion-items are children
+  'nexus-grid',    // CSS grid container
+]);
+
+/** Runtime check — used in resolveDropContainer & resolveCanvasDropTarget */
+const isContainerType = (type: string): boolean => CONTAINER_TYPES.has(type);
 
 function resolveDropContainer(overId: string): string | null {
   const page = useCanvasStore.getState().page;
@@ -139,7 +158,7 @@ function resolveDropContainer(overId: string): string | null {
   const stripped = String(overId).replace(/^drop:/, '');
   if (page.nodeMap[stripped]) {
     const node = page.nodeMap[stripped]!;
-    if (CONTAINER_TYPES.has(node.type)) return stripped;
+    if (isContainerType(node.type)) return stripped;
     return node.parentId ?? page.rootNodeId;
   }
   return page.rootNodeId;
@@ -159,7 +178,7 @@ function resolveCanvasDropTarget(
   if (!activeNode) return null;
   if (!overNode)   return null;
 
-  if (hasDropPrefix && CONTAINER_TYPES.has(overNode.type)) {
+  if (hasDropPrefix && isContainerType(overNode.type)) {
     const validChildren = overNode.children.filter((c) => c !== activeNodeId && Boolean(c));
     return { parentId: stripped, index: validChildren.length };
   }
@@ -206,6 +225,26 @@ export function Builder() {
   useAutoSave();
   usePresence();
 
+  // '?' shortcut — toggles the shortcuts modal; 'h' toggles help panel
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (target.contentEditable === 'true') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === '?' || e.key === '/') {
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+      }
+      if (e.key === 'h' || e.key === 'H') {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const isPreviewMode   = useUIStore((s) => s.isPreviewMode);
   const rightPanelOpen  = useUIStore((s) => s.rightPanelOpen);
   const isUserLoading   = useUserStore((s) => s.isLoading);
@@ -216,6 +255,8 @@ export function Builder() {
   const [dragOverState, setDragOverState] = useState<{ activeId: string | null; overId: string | null }>({
     activeId: null, overId: null,
   });
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [helpOpen,       setHelpOpen]       = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -232,12 +273,14 @@ export function Builder() {
       setActiveDragType('palette');
       setActiveDragId(null);
       setActiveDragLabel(def?.label ?? String(data.widgetType));
+      obs.trackWidgetDragged(String(data.widgetType));
     } else {
       setActiveDragType('canvas');
       setActiveDragId(nodeId);
       const node = useCanvasStore.getState().page?.nodeMap[nodeId];
       const def  = node ? getWidget(node.type) : undefined;
       setActiveDragLabel(node?.label ?? def?.label ?? 'Element');
+      obs.trackWidgetDragged(node?.type ?? 'unknown');
     }
   }, []);
 
@@ -264,6 +307,7 @@ export function Builder() {
       const widgetType = activeData.widgetType as string;
       const widgetDef  = getWidget(widgetType);
       if (!widgetDef) return;
+      obs.trackWidgetDropped(widgetType, String(over.id));
 
       let page = useCanvasStore.getState().page;
       if (!page) {
@@ -358,7 +402,7 @@ export function Builder() {
         onDragEnd={handleDragEnd}
       >
         <div data-testid="builder-shell" className="builder-shell">
-          {!isPreviewMode && <TopBar />}
+          {!isPreviewMode && <TopBar onShortcutsOpen={() => setShortcutsOpen(true)} onHelpOpen={() => setHelpOpen(true)} />}
           <div className="builder-workarea">
             {!isPreviewMode && <LeftPanel />}
             <Canvas />
@@ -368,6 +412,8 @@ export function Builder() {
 
         {/* Figma-fluid drag overlays — mounted inside DndContext for useDndMonitor access */}
         {!isPreviewMode && <SmartGuidesOverlay />}
+        {/* Portaled stable toolbar — survives CSS transforms on canvas nodes */}
+        {!isPreviewMode && <StableNodeOverlay />}
 
         {/* ── Drag Ghost (DragOverlay) ───────────────────────────────────── */}
         <DragOverlay
@@ -420,6 +466,15 @@ export function Builder() {
       <SaveErrorToast />
       {/* Dynamic Data Binding modal — driven by useDynamicDataStore activePicker */}
       {!isPreviewMode && <DynamicDataPicker />}
+
+      {/* ── Phase 12.1 First-run onboarding ────────────────────────── */}
+      <WelcomeWizard />
+
+      {/* ── Phase 12.2 Keyboard shortcuts modal ────────────────────── */}
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      {/* ── Phase 12.2 Help & Resources slide-in panel ─────────────── */}
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
     </DragOverProvider>
   );
 }

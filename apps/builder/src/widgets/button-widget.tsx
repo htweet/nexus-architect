@@ -1,11 +1,13 @@
 /**
  * Button widget — CTA / link button with multiple style variants.
  * Named button-widget to avoid collision with the ui/Button component.
+ *
+ * VAE Task 143: uses useNodeProps for data-bind resolution.
  */
 
 import { memo } from 'react';
 import { MousePointerClick } from 'lucide-react';
-import { useCanvasStore } from '@nexus/core';
+import { useCanvasStore, useNodeProps } from '@nexus/core';
 import { InspectorInput, InspectorToggle, InspectorSelect, InspectorSection, getVisualNodeStyles } from './shared';
 import type { WidgetDefinition, WidgetRendererProps, WidgetInspectorProps } from './registry';
 
@@ -43,9 +45,13 @@ const SIZE_STYLES: Record<ButtonWidgetProps['size'], string> = {
 
 const ButtonWidgetRenderer = memo(function ButtonWidgetRenderer({ nodeId, isPreview }: WidgetRendererProps) {
   const node = useCanvasStore((s) => s.page?.nodeMap[nodeId]);
+
+  // VAE: resolved props with data-bind support
+  const resolvedProps = useNodeProps(nodeId);
+
   if (!node) return null;
 
-  const p   = { ...DEFAULTS, ...(node.props as Partial<ButtonWidgetProps>) };
+  const p   = { ...DEFAULTS, ...(resolvedProps as Partial<ButtonWidgetProps>) };
   const Tag = p.href && isPreview ? 'a' : 'button';
   const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 

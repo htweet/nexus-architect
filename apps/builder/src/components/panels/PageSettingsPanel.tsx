@@ -1,5 +1,5 @@
 /**
- * PageSettingsPanel — Phase 4.4
+ * PageSettingsPanel — Phase 4.4 + VAE Task 147 (PWA section)
  *
  * Sections:
  *   1. Basic — title, slug, description
@@ -8,10 +8,12 @@
  *   4. Favicon — URL input
  *   5. Custom CSS — <textarea> injected into published page <head>
  *   6. Custom JS  — <textarea> injected before </body> on published page
+ *   7. PWA & App — manifest, service worker, display mode, cache strategy
  *
- * All writes go through updatePageMeta → isDirty → autosave.
+ * All writes go through updatePageMeta/updatePWAConfig → isDirty → autosave.
  */
 
+import { Smartphone } from 'lucide-react';
 import { useCanvasStore } from '@nexus/core';
 import { InspectorInput, InspectorTextarea, InspectorSection } from '@/widgets/shared';
 
@@ -113,6 +115,211 @@ function CodeEditor({
           {hint}
         </span>
       )}
+    </div>
+  );
+}
+
+// ─── Segmented control ────────────────────────────────────────────────────────
+
+function Segmented<T extends string>({
+  label, value, options, onChange, disabled,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="block text-[10px] font-bold uppercase tracking-[0.06em] leading-none" style={{ color: '#7a8f7e' }}>
+        {label}
+      </span>
+      <div style={{ display: 'flex', gap: 2, opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            style={{
+              flex: 1, fontSize: 10, padding: '4px 0', borderRadius: 4, cursor: 'pointer',
+              background: value === o.value ? 'rgba(16,183,127,0.15)' : 'rgba(255,255,255,0.05)',
+              color: value === o.value ? '#10b77f' : '#bbcabf',
+              border: `1px solid ${value === o.value ? 'rgba(16,183,127,0.30)' : 'rgba(255,255,255,0.08)'}`,
+            }}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── PWA Section ──────────────────────────────────────────────────────────────
+
+function PWASection() {
+  const page          = useCanvasStore((s) => s.page);
+  const updatePWAConfig = useCanvasStore((s) => s.updatePWAConfig);
+
+  if (!page) return null;
+
+  const pwa = page.pwaConfig ?? {
+    enabled: false,
+    appName: page.title,
+    shortName: page.title.slice(0, 12),
+    description: page.description ?? '',
+    themeColor: '#10b77f',
+    backgroundColor: '#0e1511',
+    display: 'standalone' as const,
+    startUrl: '/',
+    orientation: 'any' as const,
+    icon: null,
+    cacheStrategy: {
+      pages: 'network-first' as const,
+      assets: 'cache-first' as const,
+      images: 'cache-first' as const,
+      api: 'network-only' as const,
+    },
+    offlinePage: null,
+  };
+
+  const disabled = !pwa.enabled;
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 10, color: '#7a8f7e', fontWeight: 600,
+    textTransform: 'uppercase', letterSpacing: '0.06em',
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.09)', borderRadius: 4,
+    color: '#dde4dd', fontSize: 11, padding: '4px 8px', outline: 'none',
+  };
+
+  const selectStyle: React.CSSProperties = { ...inputStyle };
+
+  return (
+    <div style={{ opacity: 1 }}>
+      {/* Master toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Smartphone size={13} strokeWidth={1.5} style={{ color: pwa.enabled ? '#10b77f' : '#4a5f4e' }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#dde4dd' }}>PWA & App</span>
+        </div>
+        <button
+          onClick={() => updatePWAConfig({ enabled: !pwa.enabled })}
+          style={{
+            fontSize: 10, padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+            background: pwa.enabled ? 'rgba(16,183,127,0.15)' : 'rgba(255,255,255,0.06)',
+            color: pwa.enabled ? '#10b77f' : '#bbcabf',
+            border: `1px solid ${pwa.enabled ? 'rgba(16,183,127,0.30)' : 'rgba(255,255,255,0.08)'}`,
+          }}
+        >
+          {pwa.enabled ? 'Enabled' : 'Disabled'}
+        </button>
+      </div>
+
+      <div style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* App Name */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={labelStyle}>App Name</span>
+          <input
+            value={pwa.appName}
+            onChange={(e) => updatePWAConfig({ appName: e.target.value })}
+            placeholder={page.title}
+            style={inputStyle}
+          />
+        </div>
+
+        {/* Short Name */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={labelStyle}>Short Name (max 12 chars)</span>
+          <input
+            value={pwa.shortName}
+            onChange={(e) => updatePWAConfig({ shortName: e.target.value.slice(0, 12) })}
+            placeholder="App"
+            maxLength={12}
+            style={inputStyle}
+          />
+        </div>
+
+        {/* Description */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={labelStyle}>Description</span>
+          <input
+            value={pwa.description}
+            onChange={(e) => updatePWAConfig({ description: e.target.value })}
+            placeholder="App description…"
+            style={inputStyle}
+          />
+        </div>
+
+        {/* Theme Color */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ ...labelStyle, flex: 1 }}>Theme Color</span>
+          <input
+            type="color"
+            value={pwa.themeColor}
+            onChange={(e) => updatePWAConfig({ themeColor: e.target.value })}
+            style={{ width: 32, height: 24, border: 'none', background: 'none', cursor: 'pointer' }}
+          />
+          <input
+            value={pwa.themeColor}
+            onChange={(e) => updatePWAConfig({ themeColor: e.target.value })}
+            placeholder="#10b77f"
+            style={{ ...inputStyle, width: 80 }}
+          />
+        </div>
+
+        {/* Display Mode */}
+        <Segmented
+          label="Display Mode"
+          value={pwa.display}
+          options={[
+            { value: 'standalone', label: 'App' },
+            { value: 'fullscreen', label: 'Full' },
+            { value: 'minimal-ui', label: 'Minimal' },
+            { value: 'browser',    label: 'Browser' },
+          ]}
+          onChange={(v) => updatePWAConfig({ display: v })}
+        />
+
+        {/* Orientation */}
+        <Segmented
+          label="Orientation"
+          value={pwa.orientation}
+          options={[
+            { value: 'portrait',  label: 'Portrait'  },
+            { value: 'landscape', label: 'Landscape' },
+            { value: 'any',       label: 'Any'       },
+          ]}
+          onChange={(v) => updatePWAConfig({ orientation: v })}
+        />
+
+        {/* Cache Strategy */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={labelStyle}>Cache Strategy</span>
+          {[
+            { key: 'pages' as const,  label: 'Pages',  opts: ['network-first', 'cache-first', 'stale-while-revalidate'] },
+            { key: 'assets' as const, label: 'Assets', opts: ['cache-first', 'network-first'] },
+            { key: 'images' as const, label: 'Images', opts: ['cache-first', 'network-first'] },
+            { key: 'api' as const,    label: 'API',    opts: ['network-only', 'network-first'] },
+          ].map(({ key, label, opts }) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 10, color: '#4a5f4e', width: 44, flexShrink: 0 }}>{label}</span>
+              <select
+                value={pwa.cacheStrategy[key]}
+                onChange={(e) => updatePWAConfig({
+                  cacheStrategy: { ...pwa.cacheStrategy, [key]: e.target.value },
+                })}
+                style={selectStyle}
+              >
+                {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -230,6 +437,10 @@ export function PageSettingsPanel() {
         hint="Injected inside a <script> tag before </body>"
         rows={7}
       />
+
+      {/* ── PWA & App ── */}
+      <InspectorSection label="PWA & App" />
+      <PWASection />
     </div>
   );
 }

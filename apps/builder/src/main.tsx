@@ -16,13 +16,16 @@ setAddonLoader({ loadAddon, unloadAddon });
 if (import.meta.env.DEV) {
   import('@nexus/core').then((core) => {
     (window as unknown as Record<string, unknown>).__nexus = {
-      canvas:      core.useCanvasStore,
-      ui:          core.useUIStore,
-      selection:   core.useSelectionStore,
-      history:     core.useHistoryStore,
-      user:        core.useUserStore,
-      createPage:  core.createPage,
-      createNode:  core.createNode,
+      canvas:               core.useCanvasStore,
+      ui:                   core.useUIStore,
+      selection:            core.useSelectionStore,
+      history:              core.useHistoryStore,
+      user:                 core.useUserStore,
+      dataBind:             core.useDataBindStore,
+      createPage:           core.createPage,
+      createNode:           core.createNode,
+      resolveStateBindings: core.resolveStateBindings,
+      interpolateTokens:    core.interpolateTokens,
     };
     console.info('[Nexus] Dev stores exposed on window.__nexus');
   });

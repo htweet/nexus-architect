@@ -8,11 +8,13 @@
  *   • Display-mode renders stored HTML via dangerouslySetInnerHTML for
  *     preserved bold/italic/link formatting
  *   • Escape or click-outside exits edit mode and saves
+ *
+ * VAE Task 143: uses useNodeProps for data-bind resolution.
  */
 
 import { memo, useRef, useCallback, useEffect } from 'react';
 import { Heading1 } from 'lucide-react';
-import { useCanvasStore, useSelectionStore } from '@nexus/core';
+import { useCanvasStore, useSelectionStore, useNodeProps } from '@nexus/core';
 import { InspectorInput, InspectorSelect, InspectorSection, getVisualNodeStyles } from './shared';
 import { FloatingTextToolbar } from '@/components/canvas/FloatingTextToolbar';
 import { pushHistory } from '@/lib/history';
@@ -59,14 +61,15 @@ const HeadingRenderer = memo(function HeadingRenderer({ nodeId, isPreview }: Wid
   const ref          = useRef<HTMLElement>(null);
   const isEditing    = editingNodeId === nodeId && !isPreview;
 
+  // VAE: resolved props with data-bind support
+  const resolvedProps = useNodeProps(nodeId);
+  const p   = { ...DEFAULTS, ...(resolvedProps as Partial<HeadingProps>) };
+
   if (!node) return null;
 
-  const p   = { ...DEFAULTS, ...(node.props as Partial<HeadingProps>) };
   const Tag = p.level;
 
   // Merge RightPanel style overrides (node.styles.base) on top of prop defaults.
-  // getVisualNodeStyles filters out layout-only props (margin, padding, etc.)
-  // to prevent doubling with the CanvasNodeWrapper wrapper styles.
   const visualOverrides = getVisualNodeStyles(node.styles?.base as Record<string, string>);
 
   const sharedStyle: React.CSSProperties = {
